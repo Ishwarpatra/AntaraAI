@@ -7,14 +7,27 @@ It provides clean, high-level methods that can be used by any UI implementation
 """
 
 import uuid
+from datetime import datetime
 from typing import Dict, List, Any, Generator, Optional, Tuple
 
-from langchain_groq import ChatGroq
-from langchain_ollama import ChatOllama
+# Optional imports for different LLM providers
+ChatGroq = None
+ChatOllama = None
+
+try:
+    from langchain_groq import ChatGroq
+except ImportError:
+    pass
+
+try:
+    from langchain_ollama import ChatOllama
+except ImportError:
+    pass
 
 from config.app_config import get_config
 from core.tools import all_tools
 from core.graph_builder import build_graph
+
 
 class LTMService:
     """Service class to manage LTM agent interactions."""
@@ -93,17 +106,63 @@ class LTMService:
 
 
     def _initialize_model(self):
-        """Initialize the language model based on configuration."""
-        # Determine which model provider to use
-        if self.model_provider == "groq":
-            # Use Groq for Llama models
-            self.model = ChatGroq(model=self.model_name)
-        else:
-            # Use Ollama for other models
-            self.model = ChatOllama(base_url=self.ollama_host, model=self.ollama_model)
-
-        # Bind tools to the model
-        self.model_with_tools = self.model.bind_tools(all_tools)
+        """Initialize the language model based on configuration.
+        
+        Tries providers in order with graceful fallbacks:
+        1. Groq (if configured and available)
+        2. Google Gemini (if configured)
+        3. Ollama (local)
+        4. Mock model (for testing only)
+        """
+        import os
+        
+        self.model = None
+        
+        # Try Groq first
+        if self.model_provider == "groq" and ChatGroq is not None:
+            try:
+                if os.getenv("GROQ_API_KEY"):
+                    self.model = ChatGroq(model=self.model_name)
+                    print(f"✅ Using Groq with model: {self.model_name}")
+            except Exception as e:
+                print(f"⚠️ Groq initialization failed: {e}")
+        
+        # Try Google Gemini
+        if self.model is None:
+            try:
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                if os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"):
+                    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+                    self.model = ChatGoogleGenerativeAI(
+                        model="gemini-2.0-flash",
+                        google_api_key=api_key
+                    )
+                    print("✅ Using Google Gemini")
+            except Exception as e:
+                print(f"⚠️ Gemini initialization failed: {e}")
+        
+        # Try Ollama (local)
+        if self.model is None and ChatOllama is not None:
+            try:
+                self.model = ChatOllama(base_url=self.ollama_host, model=self.ollama_model)
+                print(f"✅ Using Ollama at {self.ollama_host}")
+            except Exception as e:
+                print(f"⚠️ Ollama initialization failed: {e}")
+        
+        # Final fallback - create a mock model for testing
+        if self.model is None:
+            print("⚠️ No LLM provider available. Creating mock model for testing.")
+            from langchain_core.language_models import FakeListLLM
+            self.model = FakeListLLM(responses=[
+                "I'm a test response. Please configure a real LLM provider (GROQ_API_KEY, GOOGLE_API_KEY, or Ollama).",
+            ])
+        
+        # Bind tools to the model (some models may not support this)
+        try:
+            self.model_with_tools = self.model.bind_tools(all_tools)
+        except Exception as e:
+            print(f"⚠️ Could not bind tools to model: {e}")
+            self.model_with_tools = self.model
 
         # Build the conversation graph
         self.graph = build_graph(self.model_with_tools)

@@ -1,10 +1,9 @@
 """
 Graph construction for the LTM application.
-Uses MongoDBSaver for persistent conversation history.
+Uses MongoDBSaver for persistent conversation history when available,
+falls back to MemorySaver for testing.
 """
 
-from langgraph.checkpoint.mongodb import MongoDBSaver
-from pymongo import MongoClient
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 
@@ -17,7 +16,42 @@ import os
 # Load environment variables
 load_dotenv()
 
-print("✅ Graph Builder with MongoDB persistence")
+print("✅ Graph Builder initializing...")
+
+
+def _get_checkpointer():
+    """Get the best available checkpointer for conversation persistence."""
+    
+    # Try MongoDB first
+    try:
+        from langgraph.checkpoint.mongodb import MongoDBSaver
+        from pymongo import MongoClient
+        
+        mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
+        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=3000)
+        # Test connection
+        client.server_info()
+        
+        checkpointer = MongoDBSaver(client=client)
+        print("✅ Using MongoDB for conversation persistence")
+        return checkpointer
+    except ImportError:
+        print("⚠️ langgraph.checkpoint.mongodb not available")
+    except Exception as e:
+        print(f"⚠️ MongoDB checkpointer failed: {e}")
+    
+    # Fallback to in-memory saver
+    try:
+        from langgraph.checkpoint.memory import MemorySaver
+        print("⚠️ Using in-memory checkpointer (conversations won't persist across restarts)")
+        return MemorySaver()
+    except ImportError:
+        print("⚠️ MemorySaver not available")
+    
+    # No checkpointer available
+    print("⚠️ No checkpointer available - conversations will not be saved")
+    return None
+
 
 def build_graph(model_with_tools):
     """Build the conversation graph with memory capabilities.
@@ -29,6 +63,7 @@ def build_graph(model_with_tools):
         Compiled graph ready for execution
     """
     print("Loading Graph...")
+    
     # Create the graph and add nodes
     builder = StateGraph(State)
 
@@ -45,11 +80,14 @@ def build_graph(model_with_tools):
     builder.add_edge("tools", "agent")
     builder.add_edge("crisis_node", END)
 
-    # Compile the graph with MongoDB checkpointer for persistent conversation history
-    mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
-    client = MongoClient(mongo_uri)
-    memory = MongoDBSaver(client=client)
-    return builder.compile(checkpointer=memory)
+    # Get checkpointer and compile
+    checkpointer = _get_checkpointer()
+    
+    if checkpointer:
+        return builder.compile(checkpointer=checkpointer)
+    else:
+        return builder.compile()
+
 
 def pretty_print_stream_chunk(chunk):
     """Format and print stream chunks from the graph execution.
