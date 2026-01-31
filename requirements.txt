@@ -16,4 +16,6 @@ streamlit
 pandas
 plotly
 fastapi
-uvicorn
+uvicorntwilio>=8.0.0
+langchain-groq
+langchain-ollama
