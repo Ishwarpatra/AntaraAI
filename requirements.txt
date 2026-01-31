@@ -1,21 +1,39 @@
+# Core dependencies
 google-genai
 opencv-python
 pyaudio
 pillow
 mss
 python-dotenv
+
+# Database
 pymongo
 dnspython
+
+# LangChain ecosystem
 langchain
 langchain-community
 langchain-core
 langchain-huggingface
+langchain-openai
+langchain-google-genai
+langchain-groq
+langchain-ollama
 langgraph
 langmem
+
+# UI
 streamlit
 pandas
 plotly
+
+# API
 fastapi
-uvicorntwilio>=8.0.0
-langchain-groq
-langchain-ollama
+uvicorn
+requests
+
+# Integrations
+twilio>=8.0.0
+
+# Optional: embeddings
+sentence-transformers
