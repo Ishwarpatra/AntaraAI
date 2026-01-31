@@ -111,7 +111,7 @@ class LTMService:
         Tries providers in order with graceful fallbacks:
         1. Groq (if configured and available)
         2. Google Gemini (if configured)
-        3. Ollama (local)
+        3. Ollama (local) - only if server is actually running
         4. Mock model (for testing only)
         """
         import os
@@ -131,31 +131,61 @@ class LTMService:
         if self.model is None:
             try:
                 from langchain_google_genai import ChatGoogleGenerativeAI
-                if os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"):
-                    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+                api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+                if api_key:
                     self.model = ChatGoogleGenerativeAI(
                         model="gemini-2.0-flash",
                         google_api_key=api_key
                     )
                     print("✅ Using Google Gemini")
+            except ImportError:
+                print("⚠️ langchain_google_genai not installed")
             except Exception as e:
                 print(f"⚠️ Gemini initialization failed: {e}")
         
-        # Try Ollama (local)
+        # Try Ollama (local) - but verify the server is actually running first
         if self.model is None and ChatOllama is not None:
             try:
-                self.model = ChatOllama(base_url=self.ollama_host, model=self.ollama_model)
-                print(f"✅ Using Ollama at {self.ollama_host}")
+                import httpx
+                # Test if Ollama server is actually running
+                try:
+                    test_response = httpx.get(f"{self.ollama_host}/api/tags", timeout=2.0)
+                    if test_response.status_code == 200:
+                        self.model = ChatOllama(base_url=self.ollama_host, model=self.ollama_model)
+                        print(f"✅ Using Ollama at {self.ollama_host} with model: {self.ollama_model}")
+                    else:
+                        print(f"⚠️ Ollama server returned status {test_response.status_code}")
+                except (httpx.ConnectError, httpx.TimeoutException):
+                    print(f"⚠️ Ollama server not running at {self.ollama_host}")
+            except ImportError:
+                # httpx not available, try anyway but may fail later
+                try:
+                    self.model = ChatOllama(base_url=self.ollama_host, model=self.ollama_model)
+                    print(f"✅ Using Ollama at {self.ollama_host} (not verified)")
+                except Exception as e:
+                    print(f"⚠️ Ollama initialization failed: {e}")
             except Exception as e:
                 print(f"⚠️ Ollama initialization failed: {e}")
         
-        # Final fallback - create a mock model for testing
+        # Final fallback - create a mock chat model for testing
         if self.model is None:
-            print("⚠️ No LLM provider available. Creating mock model for testing.")
-            from langchain_core.language_models import FakeListLLM
-            self.model = FakeListLLM(responses=[
-                "I'm a test response. Please configure a real LLM provider (GROQ_API_KEY, GOOGLE_API_KEY, or Ollama).",
-            ])
+            print("⚠️ No LLM provider available. Creating mock chat model for testing.")
+            print("   Configure one of: GROQ_API_KEY, GOOGLE_API_KEY, GEMINI_API_KEY, or start Ollama")
+            try:
+                from langchain_core.language_models.fake_chat_models import FakeListChatModel
+                self.model = FakeListChatModel(
+                    responses=[
+                        "Hello! I'm running in test mode because no LLM is configured. Please set GROQ_API_KEY, GOOGLE_API_KEY, or start Ollama to enable full AI capabilities. How can I help you today?",
+                        "I'm still in test mode. To use the full AI features, please configure an LLM provider.",
+                        "Test mode response. Please configure a real LLM to get actual AI responses.",
+                    ]
+                )
+            except Exception as e:
+                print(f"⚠️ FakeListChatModel failed: {e}")
+                from langchain_core.language_models import FakeListLLM
+                self.model = FakeListLLM(responses=[
+                    "Test mode: Please configure an LLM provider (GROQ_API_KEY, GOOGLE_API_KEY, or Ollama).",
+                ])
         
         # Bind tools to the model (some models may not support this)
         try:
