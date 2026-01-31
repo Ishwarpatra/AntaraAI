@@ -24,6 +24,8 @@ class LTMService:
         self.model = None
         self.model_with_tools = None
         self.graph = None
+        self.live_session_manager = None
+        self.wellness_scheduler = None
 
         # Store model configuration to avoid repeated config calls
         self.model_provider = get_config("model_provider")
@@ -33,8 +35,62 @@ class LTMService:
 
         try:
             self._initialize_model()
+            self._initialize_live_session()
+            self._initialize_scheduler()
         except Exception as e:
             raise RuntimeError(f"Failed to initialize LTM service: {e}") from e
+
+    def _initialize_live_session(self):
+        """Initialize the live session manager for audio/video sessions."""
+        try:
+            from core.live_session import LiveSessionManager
+            from config.system_config import SystemConfig
+            
+            if SystemConfig.LIVE_SESSION_ENABLED:
+                self.live_session_manager = LiveSessionManager()
+                print("✅ Live session manager initialized")
+            else:
+                print("ℹ️ Live sessions disabled via LIVE_SESSION_ENABLED config")
+        except ImportError as e:
+            print(f"⚠️ Live session dependencies not available: {e}")
+            self.live_session_manager = None
+        except Exception as e:
+            print(f"⚠️ Could not initialize live session manager: {e}")
+            self.live_session_manager = None
+
+    def _initialize_scheduler(self):
+        """Initialize the wellness scheduler for background tasks."""
+        try:
+            from core.scheduler import get_wellness_scheduler
+            
+            self.wellness_scheduler = get_wellness_scheduler(service=self)
+            self.wellness_scheduler.start()
+            print("✅ Wellness scheduler initialized and started")
+        except ImportError as e:
+            print(f"⚠️ Scheduler dependencies not available: {e}")
+            self.wellness_scheduler = None
+        except Exception as e:
+            print(f"⚠️ Could not initialize wellness scheduler: {e}")
+            self.wellness_scheduler = None
+
+    def schedule_wellness_tasks(self, user_id: str):
+        """Schedule wellness tasks (selfie requests, mood check-ins) for a user.
+        
+        Args:
+            user_id: The user ID to schedule tasks for
+        """
+        if self.wellness_scheduler:
+            self.wellness_scheduler.schedule_selfie_request(user_id)
+            self.wellness_scheduler.schedule_daily_mood_checkin(user_id)
+            return True
+        return False
+
+    def get_scheduler_status(self) -> Dict[str, Any]:
+        """Get the status of the wellness scheduler."""
+        if self.wellness_scheduler:
+            return self.wellness_scheduler.get_status()
+        return {"running": False, "tasks": {}, "users_with_tasks": []}
+
 
     def _initialize_model(self):
         """Initialize the language model based on configuration."""
