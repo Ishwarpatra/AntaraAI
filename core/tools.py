@@ -89,97 +89,218 @@ def send_alert_tool(message: str, specific_contact: str = "guardian"):
 
 # Music Therapy Tool
 import random
-from typing import List
+from typing import List, Dict, Any
 
 class MusicTherapyTool:
-    """Class-based implementation of the Music Therapy tool.
+    """Enhanced Music Therapy tool with real playable music URIs.
 
-    This class encapsulates recommendation logic and session logging so it can be
-    instantiated and used directly or wrapped by a `tool`/`StructuredTool` adapter.
+    Provides Spotify playlist links and YouTube music URLs based on therapeutic mood.
+    Includes curated playlists for different emotional states and therapeutic goals.
     """
+    
+    # Curated therapeutic playlists with real URIs
+    THERAPEUTIC_PLAYLISTS: Dict[str, List[Dict[str, Any]]] = {
+        "happy": [
+            {
+                "title": "Happy Hits",
+                "spotify": "https://open.spotify.com/playlist/37i9dQZF1DXdPec7aLTmlC",
+                "youtube": "https://www.youtube.com/playlist?list=PLDIoUOhQQPlXqVFgpN0vOlFBT0X7rXQ0j",
+                "description": "Upbeat pop music to maintain positive energy",
+                "bpm_range": "120-140"
+            },
+            {
+                "title": "Mood Booster",
+                "spotify": "https://open.spotify.com/playlist/37i9dQZF1DX3rxVfibe1L0",
+                "youtube": "https://www.youtube.com/results?search_query=mood+booster+playlist",
+                "description": "Feel-good songs for an instant mood lift",
+                "bpm_range": "100-130"
+            }
+        ],
+        "sad": [
+            {
+                "title": "Peaceful Piano",
+                "spotify": "https://open.spotify.com/playlist/37i9dQZF1DX4sWSpwq3LiO",
+                "youtube": "https://www.youtube.com/results?search_query=peaceful+piano+music",
+                "description": "Gentle classical music for emotional processing",
+                "bpm_range": "60-80"
+            },
+            {
+                "title": "Healing Music",
+                "spotify": "https://open.spotify.com/playlist/37i9dQZF1DWZqd5JICZI0u",
+                "youtube": "https://www.youtube.com/results?search_query=healing+instrumental+music",
+                "description": "Soft instrumental music for reflection and healing",
+                "bpm_range": "50-70"
+            }
+        ],
+        "anxious": [
+            {
+                "title": "Deep Focus",
+                "spotify": "https://open.spotify.com/playlist/37i9dQZF1DWZeKCadgRdKQ",
+                "youtube": "https://www.youtube.com/results?search_query=calm+ambient+music",
+                "description": "Ambient music for relaxation and stress reduction",
+                "bpm_range": "60-90"
+            },
+            {
+                "title": "Nature Sounds",
+                "spotify": "https://open.spotify.com/playlist/37i9dQZF1DX4PP3DA4J0N8",
+                "youtube": "https://www.youtube.com/results?search_query=nature+sounds+rain+ocean",
+                "description": "Rain, ocean waves, and forest sounds for calm",
+                "bpm_range": "N/A"
+            },
+            {
+                "title": "Binaural Beats Therapy",
+                "spotify": "https://open.spotify.com/playlist/37i9dQZF1DX7EF8wVxBVhG",
+                "youtube": "https://www.youtube.com/results?search_query=binaural+beats+anxiety+relief",
+                "description": "Alpha waves for anxiety reduction (use headphones)",
+                "bpm_range": "N/A"
+            }
+        ],
+        "calm": [
+            {
+                "title": "Meditation Music",
+                "spotify": "https://open.spotify.com/playlist/37i9dQZF1DWZqd5JICZI0u",
+                "youtube": "https://www.youtube.com/results?search_query=meditation+music+10+minutes",
+                "description": "Music for mindfulness and deeper relaxation",
+                "bpm_range": "40-60"
+            },
+            {
+                "title": "Acoustic Morning",
+                "spotify": "https://open.spotify.com/playlist/37i9dQZF1DX4E3UdUs7fUx",
+                "youtube": "https://www.youtube.com/results?search_query=acoustic+guitar+relaxing",
+                "description": "Acoustic guitar for peaceful atmosphere",
+                "bpm_range": "70-90"
+            }
+        ],
+        "energetic": [
+            {
+                "title": "Workout Motivation",
+                "spotify": "https://open.spotify.com/playlist/37i9dQZF1DX76Wlfdnj7AP",
+                "youtube": "https://www.youtube.com/results?search_query=workout+motivation+music",
+                "description": "High-energy music for motivation and focus",
+                "bpm_range": "130-160"
+            },
+            {
+                "title": "Power Hour",
+                "spotify": "https://open.spotify.com/playlist/37i9dQZF1DX32NsLKyzScr",
+                "youtube": "https://www.youtube.com/results?search_query=power+music+focus",
+                "description": "Rock and electronic for energy boost",
+                "bpm_range": "120-150"
+            }
+        ],
+        "sleepy": [
+            {
+                "title": "Sleep",
+                "spotify": "https://open.spotify.com/playlist/37i9dQZF1DWZd79rJ6a7lp",
+                "youtube": "https://www.youtube.com/results?search_query=sleep+music+8+hours",
+                "description": "Slow tempo music for better sleep",
+                "bpm_range": "40-60"
+            },
+            {
+                "title": "White Noise",
+                "spotify": "https://open.spotify.com/playlist/37i9dQZF1DX4aYNO8X5RpR",
+                "youtube": "https://www.youtube.com/results?search_query=white+noise+sleep",
+                "description": "White noise for deep, restful sleep",
+                "bpm_range": "N/A"
+            }
+        ],
+        "angry": [
+            {
+                "title": "Release Rage",
+                "spotify": "https://open.spotify.com/playlist/37i9dQZF1DX1tyCD9QhIWF",
+                "youtube": "https://www.youtube.com/results?search_query=cathartic+music+playlist",
+                "description": "Music for safe emotional release and catharsis",
+                "bpm_range": "140-180"
+            },
+            {
+                "title": "Transition to Calm",
+                "spotify": "https://open.spotify.com/playlist/37i9dQZF1DWZqd5JICZI0u",
+                "youtube": "https://www.youtube.com/results?search_query=calming+down+music",
+                "description": "Help transition from anger to calm (play after release)",
+                "bpm_range": "60-80"
+            }
+        ]
+    }
+    
     def __init__(self, db_client=None):
-        # db_client is expected to be the pymongo `db` object imported from memory_manager
         self.db = db_client
 
     def recommend(self, mood: str, duration_minutes: int = 10) -> str:
-        """Provide a music recommendation and log the session."""
-        music_recommendations = {
-            "happy": [
-                "Upbeat pop music to maintain positive energy",
-                "Classical music for cognitive enhancement",
-                "Jazz for creative stimulation"
-            ],
-            "sad": [
-                "Gentle classical music for emotional processing",
-                "Nature sounds for comfort",
-                "Soft instrumental music for reflection"
-            ],
-            "anxious": [
-                "Ambient music for relaxation",
-                "Binaural beats for stress reduction",
-                "Nature sounds (rain, ocean waves) for calm"
-            ],
-            "calm": [
-                "Meditation music for deeper relaxation",
-                "Acoustic guitar for peaceful atmosphere",
-                "Piano compositions for introspection"
-            ],
-            "energetic": [
-                "Motivational rock for energy boost",
-                "Upbeat electronic music for focus",
-                "Folk music for positive vibes"
-            ],
-            "sleepy": [
-                "Slow tempo classical music for sleep",
-                "White noise for better sleep quality",
-                "Guided meditation music for rest"
-            ]
+        """Provide a music recommendation with playable URIs and log the session."""
+        mood_normalized = (mood or "").lower().strip()
+        
+        # Map common variations
+        mood_mapping = {
+            "stressed": "anxious",
+            "nervous": "anxious",
+            "worried": "anxious",
+            "depressed": "sad",
+            "down": "sad",
+            "upset": "sad",
+            "tired": "sleepy",
+            "exhausted": "sleepy",
+            "excited": "energetic",
+            "motivated": "energetic",
+            "peaceful": "calm",
+            "relaxed": "calm",
+            "frustrated": "angry",
+            "irritated": "angry",
+            "joyful": "happy",
+            "content": "happy"
         }
-
-        mood_normalized = (mood or "").lower()
-        if mood_normalized not in music_recommendations:
+        
+        mood_normalized = mood_mapping.get(mood_normalized, mood_normalized)
+        
+        if mood_normalized not in self.THERAPEUTIC_PLAYLISTS:
             mood_normalized = "calm"
 
-        selected_music = random.choice(music_recommendations[mood_normalized])
-
+        playlist = random.choice(self.THERAPEUTIC_PLAYLISTS[mood_normalized])
+        
         # Log session if db available
         try:
             if self.db:
                 self.db["music_therapy_sessions"].insert_one({
                     "mood": mood_normalized,
-                    "recommendation": selected_music,
+                    "playlist_title": playlist["title"],
+                    "spotify_uri": playlist["spotify"],
+                    "youtube_uri": playlist["youtube"],
                     "duration": duration_minutes,
                     "timestamp": datetime.now()
                 })
         except Exception:
-            # Never fail the tool due to logging issues
             pass
 
-        return f"Music Therapy Recommendation: {selected_music}. Duration: {duration_minutes} minutes. Therapeutic target: {mood_normalized}."
+        response = f"""🎵 **Music Therapy Recommendation**
+
+**Playlist:** {playlist['title']}
+**Therapeutic Focus:** {playlist['description']}
+**Duration:** {duration_minutes} minutes
+**BPM Range:** {playlist['bpm_range']}
+
+🎧 **Listen Now:**
+- [Spotify]({playlist['spotify']})
+- [YouTube]({playlist['youtube']})
+
+💡 *Tip: For best therapeutic effect, use headphones in a comfortable position. Focus on your breathing as you listen.*"""
+
+        return response
 
 # Adapter: keep the existing functional tool for backwards compatibility
 @tool
 def music_therapy_tool(mood: str, duration_minutes: int = 10) -> str:
-    """Provides music therapy recommendations based on the user's mood.
-    This function wraps the class-based implementation for backward compatibility.
+    """Provides music therapy recommendations with playable Spotify/YouTube links.
+    
+    Args:
+        mood: User's current mood (happy, sad, anxious, calm, energetic, sleepy, angry)
+        duration_minutes: How long to listen (default 10 minutes)
+    
+    Returns:
+        Music recommendation with direct links to Spotify and YouTube playlists
     """
     instance = MusicTherapyTool(db_client=db)
     return instance.recommend(mood, duration_minutes)
 
-# Expose a class-based tool instance as a StructuredTool if needed
-try:
-    from langchain_core.tools import StructuredTool
-    music_therapy_class_tool = StructuredTool(
-        name="music_therapy_class",
-        description="Music therapy recommendations (class-based)",
-        func=MusicTherapyTool(db_client=db).recommend
-    )
-    all_tools.append(music_therapy_class_tool)
-except Exception:
-    # If StructuredTool isn't available, continue silently (function wrapper exists)
-    pass
-
 # End of Music Therapy Tool
+
 @tool
 def request_selfie_tool(reason: str = "routine check-in") -> str:
     """Requests the user to take a selfie for mood assessment.
@@ -198,55 +319,118 @@ def request_selfie_tool(reason: str = "routine check-in") -> str:
     return f"I'd like to check in on your well-being. Could you please take a quick selfie? This will help me assess your mood and provide better support. Reason: {reason}"
 
 @tool
-def analyze_visual_context_tool(image_description: str) -> str:
-    """Analyzes visual context from user's environment or appearance.
+def analyze_visual_context_tool(image_data: str = None, image_path: str = None) -> str:
+    """Analyzes visual context from user's camera feed using Gemini Vision.
+    
+    Uses Google Gemini's vision capabilities to analyze:
+    - Facial expressions and emotional state
+    - Environmental factors (lighting, organization)
+    - Safety concerns (weapons, self-harm indicators)
+    
     Args:
-        image_description: Description of what's visible in the user's camera feed
+        image_data: Base64-encoded image data (preferred)
+        image_path: Path to image file (alternative)
     Returns:
         Analysis of visual context and its implications for user's wellbeing
     """
-    # This would normally connect to a computer vision model in a real implementation
-    # For now, we'll simulate analysis based on the description
-
-    # Log the visual analysis request
-    db["visual_analyses"].insert_one({
-        "description": image_description,
-        "timestamp": datetime.now()
-    })
-
-    # Analyze the description for indicators
-    description_lower = image_description.lower()
-
-    # Look for environmental and appearance indicators
-    environmental_indicators = {
-        "disorganized_space": ["messy", "cluttered", "untidy", "chaotic"],
-        "isolated_setting": ["alone", "empty room", "no people", "quiet"],
-        "stress_indicators": ["dark", "dim lighting", "poor hygiene", "unkempt"],
-        "positive_indicators": ["natural light", "plants", "organized", "clean"]
-    }
-
-    findings = []
-    for category, keywords in environmental_indicators.items():
-        for keyword in keywords:
-            if keyword in description_lower:
-                findings.append(category.replace("_", " ").title())
-
-    # Physical appearance indicators
-    appearance_indicators = [
-        "tired eyes", "slouched posture", "tears", "distressed facial expression",
-        "pale complexion", "disheveled appearance", "restless movements"
-    ]
-
-    for indicator in appearance_indicators:
-        if indicator in description_lower:
-            findings.append(f"Physical sign: {indicator}")
-
-    if not findings:
-        analysis_result = "Visual context appears normal. No concerning indicators detected."
+    import base64
+    from google import genai
+    from google.genai import types
+    
+    # Initialize Gemini client
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return "Visual analysis unavailable: GEMINI_API_KEY not configured"
+    
+    client = genai.Client(api_key=api_key)
+    
+    # Prepare the image
+    image_parts = []
+    if image_data:
+        # Decode base64 if needed
+        if isinstance(image_data, str) and not image_data.startswith('/'):
+            try:
+                image_bytes = base64.b64decode(image_data)
+                image_parts.append(types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"))
+            except Exception as e:
+                return f"Failed to decode image data: {e}"
+    elif image_path:
+        try:
+            with open(image_path, "rb") as f:
+                image_bytes = f.read()
+            image_parts.append(types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"))
+        except Exception as e:
+            return f"Failed to read image file: {e}"
     else:
-        analysis_result = f"Visual analysis detected: {', '.join(findings)}. This may suggest the user needs additional support."
+        return "No image provided for analysis"
+    
+    # Create the analysis prompt
+    analysis_prompt = """Analyze this image for a mental health wellness assessment. Provide a structured analysis:
 
-    return analysis_result
+1. **Emotional State**: Assess facial expressions, body language, and apparent mood (scale 1-10 for distress level)
+2. **Environmental Factors**: Note lighting, organization, isolation indicators
+3. **Safety Concerns**: Flag any visible weapons, sharp objects, medications, or self-harm indicators
+4. **Wellness Indicators**: Positive signs like natural light, plants, organized space, grooming
+
+Format your response as JSON:
+{
+    "distress_level": 0-10,
+    "emotions_detected": ["emotion1", "emotion2"],
+    "safety_concerns": ["concern1"] or [],
+    "environmental_notes": "description",
+    "wellness_summary": "brief summary",
+    "recommended_action": "none|check_in|urgent_intervention"
+}
+
+Be accurate and conservative. Only flag safety concerns if clearly visible."""
+
+    try:
+        # Call Gemini Vision API
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=[
+                types.Content(parts=[
+                    types.Part(text=analysis_prompt),
+                    *image_parts
+                ])
+            ]
+        )
+        
+        analysis_text = response.text
+        
+        # Log the analysis
+        db["visual_analyses"].insert_one({
+            "analysis": analysis_text,
+            "timestamp": datetime.now(),
+            "model": "gemini-2.0-flash",
+            "method": "gemini_vision"
+        })
+        
+        # Parse for crisis detection
+        import json
+        try:
+            analysis_json = json.loads(analysis_text)
+            
+            # Trigger crisis protocol if needed
+            if analysis_json.get("recommended_action") == "urgent_intervention":
+                return f"🚨 CRITICAL VISUAL ALERT: {analysis_json.get('wellness_summary', 'Urgent intervention required')}"
+            elif analysis_json.get("distress_level", 0) >= 7:
+                return f"⚠️ HIGH DISTRESS DETECTED (Level {analysis_json['distress_level']}/10): {analysis_json.get('wellness_summary', 'User appears distressed')}"
+            else:
+                return f"Visual analysis complete: {analysis_json.get('wellness_summary', analysis_text)}"
+                
+        except json.JSONDecodeError:
+            # Return raw text if not valid JSON
+            return f"Visual analysis: {analysis_text}"
+            
+    except Exception as e:
+        # Fallback to text-based analysis if vision fails
+        db["visual_analyses"].insert_one({
+            "error": str(e),
+            "timestamp": datetime.now(),
+            "method": "fallback"
+        })
+        return f"Vision analysis failed: {e}. Please ensure camera access is enabled."
 
 # Integration tools
 from core.integrations import get_integration_manager

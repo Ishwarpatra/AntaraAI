@@ -11,90 +11,228 @@ import re
 from core.state import State
 from config.prompt_templates import prompt
 
-def analyze_sentiment(text: str) -> str:
-    """Sophisticated sentiment analysis for crisis detection using multiple approaches."""
-    import re
-    from collections import Counter
+# Cache for the ML model to avoid reloading
+_sentiment_classifier = None
+_emotion_classifier = None
+
+
+def _get_ml_classifiers():
+    """Lazy load ML classifiers to avoid startup overhead."""
+    global _sentiment_classifier, _emotion_classifier
+    
+    if _sentiment_classifier is None:
+        try:
+            from transformers import pipeline
+            
+            # Sentiment classifier for positive/negative polarity
+            _sentiment_classifier = pipeline(
+                "sentiment-analysis",
+                model="distilbert-base-uncased-finetuned-sst-2-english",
+                device=-1  # CPU
+            )
+            
+            # Emotion classifier for more nuanced detection
+            _emotion_classifier = pipeline(
+                "text-classification",
+                model="j-hartmann/emotion-english-distilroberta-base",
+                top_k=3,  # Get top 3 emotions
+                device=-1  # CPU
+            )
+            
+            print("✅ ML sentiment/emotion classifiers loaded successfully")
+        except ImportError:
+            print("⚠️ transformers not installed, using rule-based fallback")
+            return None, None
+        except Exception as e:
+            print(f"⚠️ Failed to load ML classifiers: {e}")
+            return None, None
+    
+    return _sentiment_classifier, _emotion_classifier
+
+
+def analyze_sentiment_ml(text: str) -> dict:
+    """
+    ML-based sentiment analysis using HuggingFace Transformers.
+    
+    Returns:
+        dict with:
+            - sentiment: 'POSITIVE' | 'NEGATIVE'
+            - sentiment_score: float (confidence)
+            - emotions: list of detected emotions with scores
+            - crisis_indicators: list of high-risk emotions
+    """
+    sentiment_clf, emotion_clf = _get_ml_classifiers()
+    
+    if sentiment_clf is None:
+        return None  # Fallback to rule-based
+    
+    result = {
+        "sentiment": "NEUTRAL",
+        "sentiment_score": 0.0,
+        "emotions": [],
+        "crisis_indicators": []
+    }
+    
+    try:
+        # Get sentiment polarity
+        sentiment_result = sentiment_clf(text[:512])[0]  # Limit to 512 tokens
+        result["sentiment"] = sentiment_result["label"]
+        result["sentiment_score"] = sentiment_result["score"]
+        
+        # Get emotions
+        emotion_results = emotion_clf(text[:512])
+        if emotion_results and isinstance(emotion_results[0], list):
+            emotion_results = emotion_results[0]
+        
+        for emotion in emotion_results:
+            result["emotions"].append({
+                "label": emotion["label"],
+                "score": emotion["score"]
+            })
+            
+            # Check for crisis-indicating emotions
+            high_risk_emotions = ["fear", "sadness", "anger", "disgust"]
+            if emotion["label"].lower() in high_risk_emotions and emotion["score"] > 0.5:
+                result["crisis_indicators"].append(emotion["label"])
+                
+    except Exception as e:
+        print(f"⚠️ ML sentiment analysis error: {e}")
+        return None
+    
+    return result
+
+
+def analyze_sentiment_rules(text: str) -> tuple:
+    """
+    Rule-based sentiment analysis fallback.
+    
+    Returns:
+        tuple: (risk_level, score_details)
+    """
     from config.system_config import SystemConfig
-
-    # Preprocess the text
+    
     text_lower = text.lower().strip()
-
-    # Initialize scores for different aspects
+    
     crisis_score = 0
     emotional_escalation_score = 0
     physical_distress_score = 0
     relational_stress_score = 0
 
-    # Approach 1: Keyword-based detection with context awareness
+    # Crisis patterns
     for pattern in SystemConfig.CRISIS_PATTERNS:
         if re.search(pattern, text_lower):
-            crisis_score += 3  # High risk indicator
+            crisis_score += 3
 
-    # Approach 2: High negative indicators
+    # High negative indicators
     for indicator in SystemConfig.HIGH_NEG_INDICATORS:
         if indicator in text_lower:
-            crisis_score += 2  # Medium-high risk indicator
+            crisis_score += 2
 
-    # Approach 3: Crisis markers
+    # Crisis markers
     for marker in SystemConfig.CRISIS_MARKERS:
         if marker in text_lower:
-            crisis_score += 3  # High risk indicator
+            crisis_score += 3
 
-    # Approach 4: Emotional escalation patterns
+    # Emotional escalation
     for pattern in SystemConfig.EMOTIONAL_ESCALATION_PATTERNS:
         if re.search(pattern, text_lower):
             emotional_escalation_score += 2
 
-    # Approach 5: Physical distress indicators
+    # Physical distress
     for indicator in SystemConfig.PHYSICAL_DISTRESS_INDICATORS:
         if indicator in text_lower:
             physical_distress_score += 1
 
-    # Approach 6: Relational stress indicators
+    # Relational stress
     for indicator in SystemConfig.RELATIONAL_STRESS_INDICATORS:
         if indicator in text_lower:
             relational_stress_score += 1
 
-    # Approach 7: Sentiment intensity scoring
+    # Sentiment intensity
     neg_count = sum(text_lower.count(word) for word in SystemConfig.NEGATIVE_WORDS)
     pos_count = sum(text_lower.count(word) for word in SystemConfig.POSITIVE_WORDS)
 
-    # Calculate sentiment ratio
     if neg_count > 0:
-        sentiment_ratio = neg_count / (neg_count + pos_count + 1)  # +1 to avoid division by zero
-        if sentiment_ratio > 0.7:  # Highly negative sentiment
-            crisis_score += int(sentiment_ratio * 10)  # Scale score based on ratio
+        sentiment_ratio = neg_count / (neg_count + pos_count + 1)
+        if sentiment_ratio > 0.7:
+            crisis_score += int(sentiment_ratio * 10)
 
-    # Approach 8: Emotional escalation patterns
-    exclamation_pattern = r'[!]{2,}'  # Multiple exclamation marks
-    caps_pattern = r'(?:[A-Z]{2,})'  # Multiple consecutive capital letters
-
-    if re.search(exclamation_pattern, text) and neg_count > pos_count:
-        emotional_escalation_score += 2  # High emotional state
-
-    # Approach 9: Isolation and finality language
+    # Isolation patterns
     for pattern in SystemConfig.ISOLATION_PATTERNS:
         if re.search(pattern, text_lower):
             relational_stress_score += 1
 
-    # Calculate total risk score
-    total_risk_score = (
+    total_score = (
         crisis_score +
         emotional_escalation_score * 1.5 +
         physical_distress_score * 0.5 +
         relational_stress_score * 0.8
     )
-
-    # Determine risk level based on thresholds
-    if total_risk_score >= 8:
-        return "CRITICAL"
-    elif total_risk_score >= 4:
-        return "WARNING"
-    elif total_risk_score >= 2:
-        return "CAUTION"
+    
+    score_details = {
+        "crisis_score": crisis_score,
+        "emotional_escalation": emotional_escalation_score,
+        "physical_distress": physical_distress_score,
+        "relational_stress": relational_stress_score,
+        "total": total_score
+    }
+    
+    if total_score >= 8:
+        return "CRITICAL", score_details
+    elif total_score >= 4:
+        return "WARNING", score_details
+    elif total_score >= 2:
+        return "CAUTION", score_details
     else:
-        return "NORMAL"
+        return "NORMAL", score_details
+
+
+def analyze_sentiment(text: str) -> str:
+    """
+    Hybrid sentiment analysis combining ML and rule-based approaches.
+    
+    1. Attempts ML-based analysis using HuggingFace transformers
+    2. Falls back to rule-based analysis if ML fails
+    3. Combines both for more robust crisis detection
+    
+    Returns:
+        str: 'CRITICAL' | 'WARNING' | 'CAUTION' | 'NORMAL'
+    """
+    # Try ML-based analysis first
+    ml_result = analyze_sentiment_ml(text)
+    
+    # Always run rule-based for crisis patterns (important safety fallback)
+    rules_result, rules_details = analyze_sentiment_rules(text)
+    
+    # If ML failed, use rules only
+    if ml_result is None:
+        return rules_result
+    
+    # Combine ML and rules for final decision
+    crisis_level = "NORMAL"
+    
+    # ML indicators
+    if ml_result["sentiment"] == "NEGATIVE" and ml_result["sentiment_score"] > 0.9:
+        crisis_level = "CAUTION"
+    
+    if len(ml_result["crisis_indicators"]) >= 2:
+        crisis_level = "WARNING"
+    
+    # Check for specific high-risk emotions from ML
+    for emotion in ml_result["emotions"]:
+        if emotion["label"].lower() == "fear" and emotion["score"] > 0.7:
+            crisis_level = max(crisis_level, "WARNING", key=lambda x: ["NORMAL", "CAUTION", "WARNING", "CRITICAL"].index(x))
+        if emotion["label"].lower() == "sadness" and emotion["score"] > 0.8:
+            crisis_level = max(crisis_level, "CAUTION", key=lambda x: ["NORMAL", "CAUTION", "WARNING", "CRITICAL"].index(x))
+    
+    # Rule-based override for explicit crisis language (safety critical)
+    if rules_result == "CRITICAL":
+        crisis_level = "CRITICAL"
+    elif rules_result == "WARNING" and crisis_level in ["NORMAL", "CAUTION"]:
+        crisis_level = "WARNING"
+    
+    return crisis_level
+
 
 def should_request_selfie(state: State, config: RunnableConfig) -> bool:
     """Determine if a selfie should be requested based on time or conversation patterns."""

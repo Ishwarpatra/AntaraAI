@@ -35,5 +35,9 @@ requests
 # Integrations
 twilio>=8.0.0
 
+# ML/NLP - Sentiment Analysis
+transformers>=4.30.0
+torch>=2.0.0
+
 # Optional: embeddings
 sentence-transformers
