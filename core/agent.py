@@ -138,128 +138,97 @@ def should_request_selfie(state: State, config: RunnableConfig) -> bool:
         return False
 
 def crisis_node(state: State, config: RunnableConfig):
-    """Target node for crisis intervention with active response."""
+    """Target node for crisis intervention with IMMEDIATE active response.
+    
+    This node executes crisis interventions immediately rather than just creating
+    tool calls that may not be executed. It sends alerts via all configured channels.
+    """
     from langchain_core.messages import ToolCall
-    from core.tools import send_alert_tool
+    from core.tools import crisis_escalation_tool
     from core.integrations import get_integration_manager
+    import os
 
     # Get user ID for context
-    user_id = config.get("configurable", {}).get("user_id")
+    user_id = config.get("configurable", {}).get("user_id", "unknown_user")
 
     # Determine the severity level based on the last message
     last_message = state["messages"][-1] if state["messages"] else None
+    last_message_content = ""
     if last_message and hasattr(last_message, 'content'):
-        severity = analyze_sentiment(last_message.content)
+        last_message_content = last_message.content
+        severity = analyze_sentiment(last_message_content)
     else:
         severity = "CRITICAL"  # Default to critical if we can't determine
+
+    # === IMMEDIATE CRISIS ESCALATION ===
+    # Execute crisis escalation NOW, not as a pending tool call
+    try:
+        escalation_result = crisis_escalation_tool.invoke({
+            "user_id": user_id,
+            "severity": severity,
+            "context": f"User message: {last_message_content[:200]}..."  # Truncate for privacy
+        })
+        print(f"🚨 Crisis Escalation Result: {escalation_result}")
+    except Exception as e:
+        print(f"⚠️ Crisis escalation error: {e}")
+        escalation_result = f"Escalation attempted but encountered error: {e}"
 
     # Prepare crisis response message based on severity
     if severity == "CRITICAL":
         crisis_message = (
-            "I've detected that you are in immediate distress. I'm activating emergency "
-            "protocols and alerting your emergency contacts. Please stay safe and reach "
-            "out to someone you trust immediately. If you're having thoughts of self-harm, "
-            "please contact the National Suicide Prevention Lifeline at 988 or your local "
-            "emergency number right now."
+            "I've detected that you are in immediate distress. I have already activated emergency "
+            "protocols and your emergency contacts are being notified right now. Please stay safe and reach "
+            "out to someone you trust immediately.\n\n"
+            "🆘 **If you're having thoughts of self-harm:**\n"
+            "• Call 988 (Suicide & Crisis Lifeline)\n"
+            "• Text HOME to 741741 (Crisis Text Line)\n"
+            "• Call 911 or your local emergency number\n\n"
+            "I'm here with you. You are not alone."
         )
     elif severity == "WARNING":
         crisis_message = (
-            "I'm concerned about what you've shared. I'm alerting your support contacts "
+            "I'm concerned about what you've shared. I have notified your support contacts "
             "so they can check on you. Please consider reaching out to someone you trust "
-            "who can provide support right now."
+            "who can provide support right now.\n\n"
+            "Remember, it's brave to ask for help. You matter."
         )
     else:  # CAUTION
         crisis_message = (
-            "I'm noticing some concerning patterns in our conversation. I'm sending a "
-            "notification to your support contacts so they can check in on you. Remember, "
-            "it's okay to ask for help when you need it."
+            "I'm noticing some patterns in our conversation that concern me. I've sent a "
+            "check-in notification to your support contacts.\n\n"
+            "It's okay to ask for help when you need it. Would you like to talk more about "
+            "what's going on?"
         )
 
-    # Create multiple tool calls for different alert channels
+    # Create tool calls for additional actions the agent can take
     tool_calls = []
 
-    # Standard alert tool call
-    alert_message = f"URGENT: User may be in {severity.lower()} distress. {'Immediate' if severity == 'CRITICAL' else 'Prompt'} attention required."
-    tool_calls.append({
-        "name": "send_alert_tool",
-        "id": f"crisis_alert_{severity.lower()}_{str(hash(crisis_message))[:8]}",
-        "args": {
-            "message": alert_message,
-            "specific_contact": "emergency_contacts"
-        }
-    })
-
-    # Add integration tool calls if available
-    integration_manager = get_integration_manager()
-
-    # WhatsApp alert if configured
-    if integration_manager.whatsapp.is_available():
-        tool_calls.append({
-            "name": "send_whatsapp_message_tool",
-            "id": f"whatsapp_crisis_alert_{severity.lower()}_{str(hash(crisis_message))[:8]}",
-            "args": {
-                "phone_number": "EMERGENCY_CONTACT_PHONE",  # This would be pulled from user profile
-                "message": f"{severity.upper()} CRISIS ALERT: User {user_id} may be in distress. {'IMMEDIATE' if severity == 'CRITICAL' else 'PROMPT'} attention required."
-            }
-        })
-
-    # Telegram alert if configured
-    if integration_manager.telegram.is_available():
-        tool_calls.append({
-            "name": "send_telegram_message_tool",
-            "id": f"telegram_crisis_alert_{severity.lower()}_{str(hash(crisis_message))[:8]}",
-            "args": {
-                "chat_id": "EMERGENCY_CHAT_ID",  # This would be pulled from user profile
-                "message": f"{severity.upper()} CRISIS ALERT: User {user_id} may be in distress. {'IMMEDIATE' if severity == 'CRITICAL' else 'PROMPT'} attention required."
-            }
-        })
-
-    # EHR logging if configured
-    if user_id and integration_manager.ehr.is_available():
-        tool_calls.append({
-            "name": "log_to_ehr_tool",
-            "id": f"ehr_crisis_log_{severity.lower()}_{str(hash(crisis_message))[:8]}",
-            "args": {
-                "patient_id": user_id,
-                "note": f"{severity.upper()} crisis detected at {datetime.now()}. User may be in distress. Severity level: {severity}",
-                "category": "crisis_alert"
-            }
-        })
-
-    # Also send notification through the service
-    if user_id:
-        try:
-            from core.service import LTMService
-            service = LTMService()
-            service.send_notification(
-                user_id=user_id,
-                message=f"{severity.upper()} CRISIS DETECTED: Emergency protocols activated. Help is being contacted.",
-                notification_type="alert"
-            )
-        except:
-            # If service initialization fails, we'll still proceed with the tool calls
-            pass
-
-    # If in CRITICAL state, also trigger visual/voice intervention if possible
+    # Request selfie for wellness check (CRITICAL only)
     if severity == "CRITICAL":
-        # Request to access camera if possible
         tool_calls.append({
             "name": "request_selfie_tool",
-            "id": f"critical_selfie_request_{str(hash(crisis_message))[:8]}",
+            "id": f"crisis_selfie_{str(hash(datetime.now()))[:8]}",
             "args": {"reason": "immediate wellness check due to crisis detection"}
         })
 
-        # Request to analyze visual context if available
-        tool_calls.append({
-            "name": "analyze_visual_context_tool",
-            "id": f"critical_visual_analysis_{str(hash(crisis_message))[:8]}",
-            "args": {"image_description": "Emergency visual assessment requested due to crisis detection"}
+    # Log this crisis event
+    try:
+        from core.memory_manager import db
+        db["crisis_events"].insert_one({
+            "user_id": user_id,
+            "severity": severity,
+            "message_content": last_message_content[:500],  # Truncated for storage
+            "timestamp": datetime.now(),
+            "escalation_result": escalation_result,
+            "crisis_message_sent": crisis_message
         })
+    except Exception as e:
+        print(f"⚠️ Failed to log crisis event: {e}")
 
     return {
         "messages": [AIMessage(
             content=crisis_message,
-            tool_calls=tool_calls
+            tool_calls=tool_calls if tool_calls else None
         )],
         "next_node": None
     }
