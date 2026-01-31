@@ -298,6 +298,105 @@ async def get_crisis_history(user_id: str, limit: int = 10):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting crisis history: {str(e)}")
 
+# =============================================================================
+# GAMIFICATION ENDPOINTS
+# =============================================================================
+
+@app.get("/gamification/progress/{user_id}")
+async def get_user_progress(user_id: str):
+    """Get user's gamification progress (XP, level, streak, badges)."""
+    try:
+        from core.gamification import get_gamification_engine
+        engine = get_gamification_engine()
+        progress = engine.get_user_progress(user_id)
+        
+        return {
+            "status": "success",
+            "progress": {
+                "user_id": progress.user_id,
+                "total_xp": progress.total_xp,
+                "current_level": progress.current_level,
+                "xp_to_next_level": engine.xp_to_next_level(progress.total_xp),
+                "current_streak": progress.current_streak,
+                "longest_streak": progress.longest_streak,
+                "unlocked_badges_count": len(progress.unlocked_badges),
+                "mood_logs_count": progress.mood_logs_count,
+                "music_sessions_count": progress.music_sessions_count,
+                "conversations_count": progress.conversations_count
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting progress: {str(e)}")
+
+@app.get("/gamification/badges/{user_id}")
+async def get_user_badges(user_id: str):
+    """Get all badges unlocked by a user."""
+    try:
+        from core.gamification import get_gamification_engine
+        engine = get_gamification_engine()
+        badges = engine.get_user_badges(user_id)
+        
+        return {
+            "status": "success",
+            "unlocked_badges": [badge.model_dump() for badge in badges]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting badges: {str(e)}")
+
+@app.get("/gamification/badges/{user_id}/all")
+async def get_all_badges_with_progress(user_id: str):
+    """Get all available badges with progress towards each."""
+    try:
+        from core.gamification import get_gamification_engine
+        engine = get_gamification_engine()
+        badges = engine.get_available_badges(user_id)
+        
+        return {
+            "status": "success",
+            "badges": badges
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting badge progress: {str(e)}")
+
+@app.get("/gamification/leaderboard")
+async def get_leaderboard(limit: int = 10):
+    """Get top users by XP."""
+    try:
+        from core.gamification import get_gamification_engine
+        engine = get_gamification_engine()
+        leaderboard = engine.get_leaderboard(limit)
+        
+        return {
+            "status": "success",
+            "leaderboard": leaderboard
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting leaderboard: {str(e)}")
+
+@app.post("/gamification/activity")
+async def record_activity(user_id: str, activity_type: str, custom_xp: Optional[int] = None):
+    """Manually record an activity for gamification purposes."""
+    try:
+        from core.gamification import get_gamification_engine
+        engine = get_gamification_engine()
+        result = engine.record_activity(user_id, activity_type, custom_xp)
+        
+        return {
+            "status": "success",
+            "result": {
+                "xp_earned": result.xp_earned,
+                "total_xp": result.total_xp,
+                "level": result.level,
+                "level_up": result.level_up,
+                "streak": result.streak,
+                "streak_change": result.streak_change,
+                "new_badges": [b.model_dump() for b in result.new_badges],
+                "message": result.message
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error recording activity: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

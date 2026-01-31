@@ -64,19 +64,42 @@ from core.memory_manager import db
 
 @tool
 def log_mood_tool(mood: str, intensity: int, notes: str = ""):
-    """Logs the user's current mood. Useful when the user explicitly states how they feel.
+    """Logs the user's current mood and awards XP for tracking.
+    
     Args:
         mood: One of 'Happy', 'Sad', 'Anxious', 'Angry', 'Neutral'.
         intensity: 1-10 scale.
         notes: Optional context.
+    
+    Returns:
+        Confirmation message with gamification feedback (XP earned, streak, badges)
     """
+    # Get user_id from context (this would be passed in real implementation)
+    # For now, use a default if not available
+    import threading
+    user_id = getattr(threading.current_thread(), 'user_id', 'default_user')
+    
+    # Log the mood to database
     db["mood_logs"].insert_one({
+        "user_id": user_id,
         "mood": mood,
         "intensity": intensity,
         "notes": notes,
         "timestamp": datetime.now()
     })
-    return f"Logged mood: {mood} ({intensity}/10)"
+    
+    # Award XP and update gamification
+    try:
+        from core.gamification import get_gamification_engine
+        engine = get_gamification_engine()
+        result = engine.record_activity(user_id, "mood_log")
+        
+        # Return feedback for the LLM to relay to user
+        return f"✅ Logged mood: {mood} ({intensity}/10) | {result.message}"
+    except Exception as e:
+        # Fallback if gamification fails
+        return f"Logged mood: {mood} ({intensity}/10)"
+
 
 @tool
 def send_alert_tool(message: str, specific_contact: str = "guardian"):
@@ -288,35 +311,69 @@ class MusicTherapyTool:
 @tool
 def music_therapy_tool(mood: str, duration_minutes: int = 10) -> str:
     """Provides music therapy recommendations with playable Spotify/YouTube links.
+    Awards XP for engaging in music therapy.
     
     Args:
         mood: User's current mood (happy, sad, anxious, calm, energetic, sleepy, angry)
         duration_minutes: How long to listen (default 10 minutes)
     
     Returns:
-        Music recommendation with direct links to Spotify and YouTube playlists
+        Music recommendation with direct links and gamification feedback
     """
+    import threading
+    user_id = getattr(threading.current_thread(), 'user_id', 'default_user')
+    
+    # Get music recommendation
     instance = MusicTherapyTool(db_client=db)
-    return instance.recommend(mood, duration_minutes)
+    recommendation = instance.recommend(mood, duration_minutes)
+    
+    # Award XP for music therapy session
+    try:
+        from core.gamification import get_gamification_engine
+        engine = get_gamification_engine()
+        result = engine.record_activity(user_id, "music_therapy")
+        
+        # Append gamification feedback to response
+        return f"{recommendation}\n\n---\n🎮 **Progress:** {result.message}"
+    except Exception as e:
+        return recommendation
+
 
 # End of Music Therapy Tool
 
 @tool
 def request_selfie_tool(reason: str = "routine check-in") -> str:
     """Requests the user to take a selfie for mood assessment.
+    Awards XP when the user engages in visual wellness check-ins.
+    
     Args:
         reason: Reason for requesting the selfie ('routine check-in', 'wellness monitoring', 'crisis assessment')
     Returns:
-        Message prompting the user to take a selfie
+        Message prompting the user to take a selfie with gamification feedback
     """
+    import threading
+    user_id = getattr(threading.current_thread(), 'user_id', 'default_user')
+    
     # Log the selfie request
     db["selfie_requests"].insert_one({
+        "user_id": user_id,
         "reason": reason,
         "timestamp": datetime.now(),
         "status": "requested"
     })
+    
+    # Award XP for selfie (engagement reward)
+    gamification_msg = ""
+    try:
+        from core.gamification import get_gamification_engine
+        engine = get_gamification_engine()
+        result = engine.record_activity(user_id, "selfie_taken")
+        gamification_msg = f"\n\n🎮 {result.message}"
+    except Exception:
+        pass
 
-    return f"I'd like to check in on your well-being. Could you please take a quick selfie? This will help me assess your mood and provide better support. Reason: {reason}"
+    return f"I'd like to check in on your well-being. Could you please take a quick selfie? This will help me assess your mood and provide better support. Reason: {reason}{gamification_msg}"
+
 
 @tool
 def analyze_visual_context_tool(image_data: str = None, image_path: str = None) -> str:
