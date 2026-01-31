@@ -258,6 +258,46 @@ async def get_mood_history(user_id: str, limit: int = 50):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting mood history: {str(e)}")
 
+@app.post("/scheduler/wellness/{user_id}")
+async def schedule_wellness_tasks(user_id: str):
+    """Schedule wellness tasks (selfie requests, mood check-ins) for a user."""
+    try:
+        success = service.schedule_wellness_tasks(user_id)
+        if success:
+            return {"status": "success", "message": f"Wellness tasks scheduled for user {user_id}"}
+        else:
+            raise HTTPException(status_code=503, detail="Scheduler not available")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error scheduling wellness tasks: {str(e)}")
+
+@app.get("/scheduler/status")
+async def get_scheduler_status():
+    """Get status of the wellness scheduler."""
+    try:
+        status = service.get_scheduler_status()
+        return {"status": "success", "scheduler": status}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting scheduler status: {str(e)}")
+
+@app.get("/crisis/history/{user_id}")
+async def get_crisis_history(user_id: str, limit: int = 10):
+    """Get crisis event history for a user."""
+    try:
+        from core.memory_manager import db
+        crisis_events = list(db["crisis_events"].find(
+            {"user_id": user_id},
+            {"_id": 0}
+        ).sort("timestamp", -1).limit(limit))
+        
+        # Convert timestamps to ISO format
+        for event in crisis_events:
+            if "timestamp" in event:
+                event["timestamp"] = event["timestamp"].isoformat()
+        
+        return {"user_id": user_id, "crisis_events": crisis_events}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting crisis history: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
