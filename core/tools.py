@@ -3,6 +3,7 @@ Tools configuration for the LTM application.
 
 This module defines and configures the tools available to the agent.
 """
+import os
 from langchain_community.tools import SearxSearchResults
 from langchain_community.utilities import SearxSearchWrapper
 from langchain_core.tools import StructuredTool
@@ -308,6 +309,105 @@ def log_to_ehr_tool(patient_id: str, note: str, category: str = "general") -> st
     else:
         return "EHR integration not configured"
 
+@tool
+def send_sms_tool(phone_number: str, message: str) -> str:
+    """Send an SMS message via Twilio.
+    Args:
+        phone_number: Recipient's phone number in E.164 format (e.g., +1234567890)
+        message: Message to send
+    Returns:
+        Status of the message delivery
+    """
+    integration_manager = get_integration_manager()
+    if integration_manager.twilio.is_available():
+        success = integration_manager.twilio.send_message(phone_number, message)
+        if success:
+            return f"SMS sent successfully to {phone_number}"
+        else:
+            return f"Failed to send SMS to {phone_number}"
+    else:
+        return "Twilio integration not configured"
+
+@tool
+def crisis_escalation_tool(user_id: str, severity: str, context: str = "") -> str:
+    """Execute a full crisis escalation protocol.
+    This tool sends alerts via ALL available channels simultaneously.
+    Use ONLY in confirmed crisis situations.
+    
+    Args:
+        user_id: The user's ID for tracking
+        severity: 'CRITICAL', 'WARNING', or 'CAUTION'
+        context: Additional context about the crisis situation
+        
+    Returns:
+        Summary of all escalation actions taken
+    """
+    integration_manager = get_integration_manager()
+    results = []
+    timestamp = datetime.now().isoformat()
+    
+    alert_message = f"🚨 {severity} CRISIS ALERT 🚨\nUser: {user_id}\nTime: {timestamp}\n{context}"
+    
+    # Log to database first
+    try:
+        db["crisis_alerts"].insert_one({
+            "user_id": user_id,
+            "severity": severity,
+            "context": context,
+            "timestamp": datetime.now(),
+            "status": "triggered"
+        })
+        results.append("Crisis logged to database")
+    except Exception as e:
+        results.append(f"Failed to log crisis: {e}")
+    
+    # Send via Twilio (SMS) - Primary channel for emergencies
+    if integration_manager.twilio.is_available():
+        try:
+            # Get emergency contacts from user profile (placeholder logic)
+            emergency_number = os.environ.get("EMERGENCY_CONTACT_PHONE", "")
+            if emergency_number:
+                success = integration_manager.twilio.send_message(emergency_number, alert_message)
+                if success:
+                    results.append(f"Twilio SMS sent to {emergency_number}")
+                else:
+                    results.append("Twilio SMS failed")
+        except Exception as e:
+            results.append(f"Twilio error: {e}")
+    
+    # Send via WhatsApp
+    if integration_manager.whatsapp.is_available():
+        try:
+            wa_number = os.environ.get("EMERGENCY_WHATSAPP_NUMBER", "")
+            if wa_number:
+                success = integration_manager.whatsapp.send_message(wa_number, alert_message)
+                if success:
+                    results.append(f"WhatsApp sent to {wa_number}")
+        except Exception as e:
+            results.append(f"WhatsApp error: {e}")
+    
+    # Send via Telegram
+    if integration_manager.telegram.is_available():
+        try:
+            tg_chat = os.environ.get("EMERGENCY_TELEGRAM_CHAT", "")
+            if tg_chat:
+                success = integration_manager.telegram.send_message(tg_chat, alert_message)
+                if success:
+                    results.append(f"Telegram sent to chat {tg_chat}")
+        except Exception as e:
+            results.append(f"Telegram error: {e}")
+    
+    # Log to EHR
+    if integration_manager.ehr.is_available():
+        try:
+            success = integration_manager.ehr.log_patient_note(user_id, alert_message, "crisis_alert")
+            if success:
+                results.append("EHR updated")
+        except Exception as e:
+            results.append(f"EHR error: {e}")
+    
+    return f"Crisis escalation completed: {'; '.join(results)}"
+
 all_tools.append(log_mood_tool)
 all_tools.append(send_alert_tool)
 all_tools.append(music_therapy_tool)
@@ -316,3 +416,5 @@ all_tools.append(analyze_visual_context_tool)
 all_tools.append(send_whatsapp_message_tool)
 all_tools.append(send_telegram_message_tool)
 all_tools.append(log_to_ehr_tool)
+all_tools.append(send_sms_tool)
+all_tools.append(crisis_escalation_tool)
