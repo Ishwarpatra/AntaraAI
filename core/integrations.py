@@ -203,11 +203,13 @@ class IntegrationManager:
     def __init__(self):
         self.whatsapp = WhatsAppIntegration()
         self.telegram = TelegramIntegration()
+        self.twilio = TwilioIntegration()
         self.ehr = EHRIntegration()
         
         # Log integration statuses
         print(f"WhatsApp integration: {'Available' if self.whatsapp.is_available() else 'Not configured'}")
         print(f"Telegram integration: {'Available' if self.telegram.is_available() else 'Not configured'}")
+        print(f"Twilio integration: {'Available' if self.twilio.is_available() else 'Not configured'}")
         print(f"EHR integration: {'Available' if self.ehr.is_available() else 'Not configured'}")
     
     def send_crisis_alert(self, message: str, recipients: Dict[str, list]) -> Dict[str, bool]:
