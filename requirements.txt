@@ -1,0 +1,17 @@
+google-genai
+opencv-python
+pyaudio
+pillow
+mss
+python-dotenv
+pymongo
+dnspython
+langchain
+langchain-community
+langchain-core
+langchain-huggingface
+langgraph
+langmem
+streamlit
+pandas
+plotly
