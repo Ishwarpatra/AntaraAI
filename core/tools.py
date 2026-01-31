@@ -127,14 +127,14 @@ class MusicTherapyTool:
             {
                 "title": "Happy Hits",
                 "spotify": "https://open.spotify.com/playlist/37i9dQZF1DXdPec7aLTmlC",
-                "youtube": "https://www.youtube.com/playlist?list=PLDIoUOhQQPlXqVFgpN0vOlFBT0X7rXQ0j",
+                "youtube": "https://www.youtube.com/watch?v=y6Sxv-sUYtM&list=PLQ_PIlf6OzqI5FbZDUaPBMGpujiyEABRD",
                 "description": "Upbeat pop music to maintain positive energy",
                 "bpm_range": "120-140"
             },
             {
                 "title": "Mood Booster",
                 "spotify": "https://open.spotify.com/playlist/37i9dQZF1DX3rxVfibe1L0",
-                "youtube": "https://www.youtube.com/results?search_query=mood+booster+playlist",
+                "youtube": "https://www.youtube.com/watch?v=ZbZSe6N_BXs&list=PLQ_PIlf6OzqI5FbZDUaPBMGpujiyEABRD",
                 "description": "Feel-good songs for an instant mood lift",
                 "bpm_range": "100-130"
             }
@@ -143,14 +143,14 @@ class MusicTherapyTool:
             {
                 "title": "Peaceful Piano",
                 "spotify": "https://open.spotify.com/playlist/37i9dQZF1DX4sWSpwq3LiO",
-                "youtube": "https://www.youtube.com/results?search_query=peaceful+piano+music",
+                "youtube": "https://www.youtube.com/watch?v=lFcSrYw-ARY",
                 "description": "Gentle classical music for emotional processing",
                 "bpm_range": "60-80"
             },
             {
                 "title": "Healing Music",
                 "spotify": "https://open.spotify.com/playlist/37i9dQZF1DWZqd5JICZI0u",
-                "youtube": "https://www.youtube.com/results?search_query=healing+instrumental+music",
+                "youtube": "https://www.youtube.com/watch?v=77ZozI0rw7w",
                 "description": "Soft instrumental music for reflection and healing",
                 "bpm_range": "50-70"
             }
@@ -159,21 +159,21 @@ class MusicTherapyTool:
             {
                 "title": "Deep Focus",
                 "spotify": "https://open.spotify.com/playlist/37i9dQZF1DWZeKCadgRdKQ",
-                "youtube": "https://www.youtube.com/results?search_query=calm+ambient+music",
+                "youtube": "https://www.youtube.com/watch?v=lCOF9LN_Zxs",
                 "description": "Ambient music for relaxation and stress reduction",
                 "bpm_range": "60-90"
             },
             {
                 "title": "Nature Sounds",
                 "spotify": "https://open.spotify.com/playlist/37i9dQZF1DX4PP3DA4J0N8",
-                "youtube": "https://www.youtube.com/results?search_query=nature+sounds+rain+ocean",
+                "youtube": "https://www.youtube.com/watch?v=q76bMs-NwRk",
                 "description": "Rain, ocean waves, and forest sounds for calm",
                 "bpm_range": "N/A"
             },
             {
                 "title": "Binaural Beats Therapy",
                 "spotify": "https://open.spotify.com/playlist/37i9dQZF1DX7EF8wVxBVhG",
-                "youtube": "https://www.youtube.com/results?search_query=binaural+beats+anxiety+relief",
+                "youtube": "https://www.youtube.com/watch?v=0LLnU4hI4Lw",
                 "description": "Alpha waves for anxiety reduction (use headphones)",
                 "bpm_range": "N/A"
             }
@@ -182,7 +182,7 @@ class MusicTherapyTool:
             {
                 "title": "Meditation Music",
                 "spotify": "https://open.spotify.com/playlist/37i9dQZF1DWZqd5JICZI0u",
-                "youtube": "https://www.youtube.com/results?search_query=meditation+music+10+minutes",
+                "youtube": "https://www.youtube.com/watch?v=O-6f5wQXSu8",
                 "description": "Music for mindfulness and deeper relaxation",
                 "bpm_range": "40-60"
             },
@@ -214,7 +214,7 @@ class MusicTherapyTool:
             {
                 "title": "Sleep",
                 "spotify": "https://open.spotify.com/playlist/37i9dQZF1DWZd79rJ6a7lp",
-                "youtube": "https://www.youtube.com/results?search_query=sleep+music+8+hours",
+                "youtube": "https://www.youtube.com/watch?v=1fueZCTYkpA",
                 "description": "Slow tempo music for better sleep",
                 "bpm_range": "40-60"
             },
@@ -649,6 +649,393 @@ def crisis_escalation_tool(user_id: str, severity: str, context: str = "") -> st
     
     return f"Crisis escalation completed: {'; '.join(results)}"
 
+
+# =============================================================================
+# GAMIFICATION TOOLS - Agent can check user progress
+# =============================================================================
+
+@tool
+def check_progress_tool(user_id: str = None) -> str:
+    """Check the user's gamification progress including XP, level, and streak.
+    
+    Use this tool when the user asks about their progress, level, XP, streak,
+    or wants to know how they're doing in the app.
+    
+    Args:
+        user_id: The user's ID (optional, uses current session if not provided)
+    
+    Returns:
+        A detailed string showing the user's current progress with XP, level, 
+        streak, and next level requirements
+    """
+    import threading
+    if not user_id:
+        user_id = getattr(threading.current_thread(), 'user_id', 'default_user')
+    
+    try:
+        from core.gamification import get_gamification_engine
+        engine = get_gamification_engine()
+        progress = engine.get_user_progress(user_id)
+        xp_to_next = engine.xp_to_next_level(progress.total_xp)
+        
+        # Build a comprehensive progress report
+        report = f"""🎮 **Your Progress Report**
+
+📊 **Stats:**
+- **Level:** {progress.current_level}
+- **Total XP:** {progress.total_xp}
+- **XP to Next Level:** {xp_to_next}
+
+🔥 **Streaks:**
+- **Current Streak:** {progress.current_streak} days
+- **Longest Streak:** {progress.longest_streak} days
+
+📈 **Activity Counts:**
+- Mood Logs: {progress.mood_logs_count}
+- Music Sessions: {progress.music_sessions_count}
+- Selfies Taken: {progress.selfies_taken}
+- Conversations: {progress.conversations_count}
+
+🏆 **Badges Unlocked:** {len(progress.unlocked_badges)}
+
+Keep up the great work! Log your mood daily to maintain your streak! 💪"""
+        
+        return report
+    except Exception as e:
+        return f"Unable to fetch progress: {e}"
+
+
+@tool
+def get_badges_tool(user_id: str = None) -> str:
+    """Get all badges the user has unlocked and show progress toward others.
+    
+    Use this tool when the user asks about badges, achievements, or rewards.
+    
+    Args:
+        user_id: The user's ID (optional, uses current session if not provided)
+    
+    Returns:
+        A list of unlocked badges and progress toward locked ones
+    """
+    import threading
+    if not user_id:
+        user_id = getattr(threading.current_thread(), 'user_id', 'default_user')
+    
+    try:
+        from core.gamification import get_gamification_engine, BADGE_DEFINITIONS
+        engine = get_gamification_engine()
+        badges_info = engine.get_available_badges(user_id)
+        
+        unlocked = []
+        in_progress = []
+        
+        for badge_data in badges_info:
+            badge = badge_data["badge"]
+            if badge_data["unlocked"]:
+                unlocked.append(f"{badge['icon']} **{badge['name']}** - {badge['description']} (+{badge['xp_bonus']} XP)")
+            elif badge_data["progress"] > 0:
+                in_progress.append(f"{badge['icon']} {badge['name']} ({int(badge_data['progress'])}% complete - {badge_data['current_value']}/{badge_data['required_value']})")
+        
+        report = "🏆 **Your Badges**\n\n"
+        
+        if unlocked:
+            report += "**Unlocked:**\n" + "\n".join(f"✅ {b}" for b in unlocked) + "\n\n"
+        else:
+            report += "**Unlocked:** None yet - keep going!\n\n"
+        
+        if in_progress:
+            report += "**In Progress:**\n" + "\n".join(f"🔄 {b}" for b in in_progress[:5])  # Show top 5
+        
+        return report
+    except Exception as e:
+        return f"Unable to fetch badges: {e}"
+
+
+# =============================================================================
+# ACADEMIC SUPPORT TOOLS - Student-centric features
+# =============================================================================
+
+# Academic resources database (RAG-like knowledge base)
+ACADEMIC_RESOURCES = {
+    "study_tips": {
+        "title": "Effective Study Strategies",
+        "content": """
+**Evidence-Based Study Tips:**
+
+1. **Spaced Repetition:** Review material at increasing intervals (1 day, 3 days, 1 week, 2 weeks)
+2. **Active Recall:** Test yourself instead of just re-reading notes
+3. **Pomodoro Technique:** Study for 25 minutes, break for 5, then repeat
+4. **Interleaving:** Mix different topics/subjects rather than blocking one topic
+5. **Elaborative Interrogation:** Ask "why" and "how" questions as you study
+6. **Dual Coding:** Combine words with images/diagrams
+7. **Concrete Examples:** Connect abstract concepts to real-world examples
+8. **Sleep:** Get 7-9 hours - memory consolidation happens during sleep
+
+**Environment Tips:**
+- Study in consistent locations to build habits
+- Minimize phone distractions (use app blockers if needed)
+- Good lighting and comfortable temperature
+- Have water nearby - hydration improves focus
+"""
+    },
+    "exam_anxiety": {
+        "title": "Managing Exam Anxiety",
+        "content": """
+**Coping with Exam Stress:**
+
+**Before the Exam:**
+- Prepare well in advance - cramming increases anxiety
+- Practice with past papers under timed conditions  
+- Get enough sleep the night before
+- Eat a balanced breakfast
+- Arrive early to avoid rushing
+
+**Physical Techniques:**
+- Deep breathing: 4 counts in, hold 4, out 4 (box breathing)
+- Progressive muscle relaxation
+- Light exercise before studying (walk, stretch)
+
+**Cognitive Techniques:**
+- Challenge catastrophic thoughts ("I'll fail" → "I've prepared, I'll do my best")
+- Visualize success
+- Focus on the process, not just the outcome
+- Remember: one exam doesn't define you
+
+**During the Exam:**
+- Read all questions first
+- Start with questions you know
+- If stuck, move on and return later
+- Use all available time
+"""
+    },
+    "peer_pressure": {
+        "title": "Handling Peer Pressure",
+        "content": """
+**Dealing with Social Pressure:**
+
+**Understanding Peer Pressure:**
+- It's normal to want to fit in
+- Direct pressure (being asked) vs indirect (wanting to conform)
+- Positive peers can motivate you; negative peers can lead you astray
+
+**Strategies:**
+1. **Assertive Communication:** "No thanks, that's not my thing"
+2. **Blame an Excuse:** "My parents would ground me" (takes pressure off you)
+3. **Find Your Tribe:** Surround yourself with people who share your values
+4. **Practice Saying No:** Rehearse responses so they come naturally
+5. **Exit Strategy:** Always have a way to leave uncomfortable situations
+6. **Focus on Long-Term Goals:** Will this help or hurt your future?
+
+**Building Self-Esteem:**
+- Your worth isn't determined by others' approval
+- Celebrate your unique qualities
+- Set personal boundaries and respect them
+- It's okay to be different
+"""
+    },
+    "time_management": {
+        "title": "Time Management for Students",
+        "content": """
+**Mastering Your Time:**
+
+**Planning Tools:**
+- Use a daily planner or calendar app
+- Break big projects into smaller tasks
+- Set specific, measurable goals
+- Prioritize using the Eisenhower Matrix (Urgent/Important)
+
+**Productivity Tips:**
+1. **Eat the Frog:** Do the hardest task first
+2. **Two-Minute Rule:** If it takes <2 minutes, do it now
+3. **Time Blocking:** Assign specific hours to specific tasks
+4. **Batch Similar Tasks:** Answer all emails at once, etc.
+5. **Limit Multitasking:** Focus on one thing at a time
+
+**Balance:**
+- Schedule breaks and self-care
+- Include time for hobbies and friends
+- Don't over-schedule - leave buffer time
+- Review your week every Sunday
+
+**Common Time Wasters:**
+- Excessive social media
+- Procrastination (often from fear of failure)
+- Perfectionism (done is better than perfect)
+- Lack of sleep (reduces efficiency)
+"""
+    },
+    "burnout": {
+        "title": "Preventing and Recovering from Burnout",
+        "content": """
+**Recognizing and Addressing Burnout:**
+
+**Warning Signs:**
+- Chronic exhaustion
+- Decreased motivation
+- Cynicism about school/work
+- Reduced performance
+- Physical symptoms (headaches, sleep issues)
+- Emotional detachment
+
+**Prevention:**
+- Set realistic expectations
+- Learn to say no
+- Take regular breaks (daily, weekly, seasonally)
+- Maintain hobbies outside of academics
+- Build a support network
+- Practice self-compassion
+
+**Recovery Steps:**
+1. Acknowledge you're burned out (not lazy)
+2. Take time off if possible
+3. Reassess priorities and commitments
+4. Start small - don't try to "catch up" all at once
+5. Focus on basics: sleep, nutrition, movement
+6. Seek professional help if needed (counseling)
+7. Gradually rebuild with better boundaries
+"""
+    }
+}
+
+
+@tool
+def consult_academic_resources_tool(topic: str) -> str:
+    """Search academic support resources for study tips, exam strategies, and student wellbeing.
+    
+    Use this tool when the user is asking about:
+    - Study techniques, tips, or strategies
+    - Exam anxiety or test stress
+    - Peer pressure or social difficulties
+    - Time management for school
+    - Academic burnout or overwhelm
+    
+    Args:
+        topic: The topic to search for (e.g., "study tips", "exam anxiety", "peer pressure")
+    
+    Returns:
+        Relevant academic support information and advice
+    """
+    topic_lower = topic.lower().strip()
+    
+    # Keyword matching to find relevant resources
+    topic_mapping = {
+        "study": "study_tips",
+        "studying": "study_tips",
+        "learn": "study_tips",
+        "focus": "study_tips",
+        "concentrate": "study_tips",
+        "memory": "study_tips",
+        "remember": "study_tips",
+        "revision": "study_tips",
+        "exam": "exam_anxiety",
+        "test": "exam_anxiety",
+        "anxiety": "exam_anxiety",
+        "nervous": "exam_anxiety",
+        "scared": "exam_anxiety",
+        "stress": "exam_anxiety",
+        "peer": "peer_pressure",
+        "pressure": "peer_pressure",
+        "friends": "peer_pressure",
+        "fit in": "peer_pressure",
+        "popular": "peer_pressure",
+        "bullying": "peer_pressure",
+        "time": "time_management",
+        "schedule": "time_management",
+        "organize": "time_management",
+        "procrastinate": "time_management",
+        "deadline": "time_management",
+        "burnout": "burnout",
+        "exhausted": "burnout",
+        "tired": "burnout",
+        "overwhelm": "burnout",
+        "too much": "burnout",
+        "can't cope": "burnout"
+    }
+    
+    # Find the best matching resource
+    matched_key = None
+    for keyword, resource_key in topic_mapping.items():
+        if keyword in topic_lower:
+            matched_key = resource_key
+            break
+    
+    if matched_key and matched_key in ACADEMIC_RESOURCES:
+        resource = ACADEMIC_RESOURCES[matched_key]
+        return f"📚 **{resource['title']}**\n{resource['content']}"
+    
+    # If no specific match, provide an overview
+    available_topics = [r["title"] for r in ACADEMIC_RESOURCES.values()]
+    return f"""I have resources on the following topics:
+- {chr(10).join('• ' + t for t in available_topics)}
+
+Please ask about one of these topics for detailed information!"""
+
+
+@tool
+def get_study_plan_tool(subject: str, hours_available: int, exam_date: str = None) -> str:
+    """Create a personalized study plan for a specific subject.
+    
+    Use this tool when the user needs help planning their study schedule.
+    
+    Args:
+        subject: The subject to study (e.g., "Math", "History", "Biology")
+        hours_available: Total hours available for studying
+        exam_date: When the exam is (optional, for countdown context)
+    
+    Returns:
+        A structured study plan with time allocation
+    """
+    # Calculate session distribution
+    if hours_available <= 0:
+        return "Please provide how many hours you have available for studying."
+    
+    # Evidence-based study session structure
+    sessions_per_hour = 2  # 25 min study + 5 min break = 30 min
+    total_sessions = hours_available * sessions_per_hour
+    
+    plan = f"""📖 **Study Plan for {subject}**
+
+⏰ **Total Time:** {hours_available} hours ({total_sessions} study sessions)
+
+**Recommended Schedule:**
+
+**Phase 1: Understanding (40% = {int(total_sessions * 0.4)} sessions)**
+- Read through material
+- Take notes
+- Watch explanatory videos
+- Ask questions about unclear concepts
+
+**Phase 2: Active Recall (40% = {int(total_sessions * 0.4)} sessions)**
+- Test yourself with flashcards
+- Practice problems
+- Explain concepts aloud (Feynman Technique)
+- Do past papers/quizzes
+
+**Phase 3: Review & Refine (20% = {int(total_sessions * 0.2)} sessions)**
+- Review weak areas
+- Create summary sheets
+- Quick review of everything
+- Final practice test
+
+**Session Structure (Pomodoro):**
+- 25 minutes: Focused study
+- 5 minutes: Break (stretch, water, breathe)
+- After 4 sessions: 15-30 minute longer break
+
+**Daily Tips:**
+✅ Start with the hardest topic when energy is highest
+✅ Change study location for variety
+✅ Get 7-8 hours of sleep
+✅ Stay hydrated, eat brain-healthy foods
+"""
+    
+    if exam_date:
+        plan += f"\n🗓️ **Target Date:** {exam_date} - You've got this! 💪"
+    
+    return plan
+
+
+# Add all tools to all_tools
 all_tools.append(log_mood_tool)
 all_tools.append(send_alert_tool)
 all_tools.append(music_therapy_tool)
@@ -659,3 +1046,11 @@ all_tools.append(send_telegram_message_tool)
 all_tools.append(log_to_ehr_tool)
 all_tools.append(send_sms_tool)
 all_tools.append(crisis_escalation_tool)
+
+# Gamification tools - Agent can report XP/Progress to user
+all_tools.append(check_progress_tool)
+all_tools.append(get_badges_tool)
+
+# Academic support tools - Student-centric features
+all_tools.append(consult_academic_resources_tool)
+all_tools.append(get_study_plan_tool)
