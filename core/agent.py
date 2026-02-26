@@ -12,86 +12,33 @@ from core.state import State
 from config.prompt_templates import prompt
 
 def analyze_sentiment(text: str) -> str:
-    """Sophisticated sentiment analysis for crisis detection using multiple approaches."""
-    import re
-    from collections import Counter
+    """Refactored sentiment analysis for crisis detection using structured categories."""
     from config.system_config import SystemConfig
+    import re
 
-    # Preprocess the text
     text_lower = text.lower().strip()
+    total_risk_score = 0
 
-    # Initialize scores for different aspects
-    crisis_score = 0
-    emotional_escalation_score = 0
-    physical_distress_score = 0
-    relational_stress_score = 0
+    # Iterate through defined sentiment categories and their rules
+    for category, config in SystemConfig.SENTIMENT_ANALYSIS_CONFIG.items():
+        score_impact = config.get("score_impact", 0)
 
-    # Approach 1: Keyword-based detection with context awareness
-    for pattern in SystemConfig.CRISIS_PATTERNS:
-        if re.search(pattern, text_lower):
-            crisis_score += 3  # High risk indicator
+        # Check for patterns
+        for pattern in config.get("patterns", []):
+            if re.search(pattern, text_lower):
+                total_risk_score += score_impact
 
-    # Approach 2: High negative indicators
-    for indicator in SystemConfig.HIGH_NEG_INDICATORS:
-        if indicator in text_lower:
-            crisis_score += 2  # Medium-high risk indicator
-
-    # Approach 3: Crisis markers
-    for marker in SystemConfig.CRISIS_MARKERS:
-        if marker in text_lower:
-            crisis_score += 3  # High risk indicator
-
-    # Approach 4: Emotional escalation patterns
-    for pattern in SystemConfig.EMOTIONAL_ESCALATION_PATTERNS:
-        if re.search(pattern, text_lower):
-            emotional_escalation_score += 2
-
-    # Approach 5: Physical distress indicators
-    for indicator in SystemConfig.PHYSICAL_DISTRESS_INDICATORS:
-        if indicator in text_lower:
-            physical_distress_score += 1
-
-    # Approach 6: Relational stress indicators
-    for indicator in SystemConfig.RELATIONAL_STRESS_INDICATORS:
-        if indicator in text_lower:
-            relational_stress_score += 1
-
-    # Approach 7: Sentiment intensity scoring
-    neg_count = sum(text_lower.count(word) for word in SystemConfig.NEGATIVE_WORDS)
-    pos_count = sum(text_lower.count(word) for word in SystemConfig.POSITIVE_WORDS)
-
-    # Calculate sentiment ratio
-    if neg_count > 0:
-        sentiment_ratio = neg_count / (neg_count + pos_count + 1)  # +1 to avoid division by zero
-        if sentiment_ratio > 0.7:  # Highly negative sentiment
-            crisis_score += int(sentiment_ratio * 10)  # Scale score based on ratio
-
-    # Approach 8: Emotional escalation patterns
-    exclamation_pattern = r'[!]{2,}'  # Multiple exclamation marks
-    caps_pattern = r'(?:[A-Z]{2,})'  # Multiple consecutive capital letters
-
-    if re.search(exclamation_pattern, text) and neg_count > pos_count:
-        emotional_escalation_score += 2  # High emotional state
-
-    # Approach 9: Isolation and finality language
-    for pattern in SystemConfig.ISOLATION_PATTERNS:
-        if re.search(pattern, text_lower):
-            relational_stress_score += 1
-
-    # Calculate total risk score
-    total_risk_score = (
-        crisis_score +
-        emotional_escalation_score * 1.5 +
-        physical_distress_score * 0.5 +
-        relational_stress_score * 0.8
-    )
+        # Check for keywords
+        for keyword in config.get("keywords", []):
+            if keyword in text_lower:
+                total_risk_score += score_impact
 
     # Determine risk level based on thresholds
     if total_risk_score >= 8:
         return "CRITICAL"
     elif total_risk_score >= 4:
         return "WARNING"
-    elif total_risk_score >= 2:
+    elif total_risk_score >= 1: # Lowered to 1 to catch CAUTION as well
         return "CAUTION"
     else:
         return "NORMAL"
@@ -131,7 +78,7 @@ def should_request_selfie(state: State, config: RunnableConfig) -> bool:
 
         # Random chance to request selfie periodically based on configuration
         import random
-        return random.random() < SystemConfig.SELFIE_RANDOM_CHANCE
+        return random.random() < SystemConfig.SELFIE_RANDOM_CHANCE # nosec B311
 
     except Exception as e:
         print(f"Error checking if selfie should be requested: {e}")

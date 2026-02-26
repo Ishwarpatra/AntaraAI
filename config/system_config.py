@@ -26,6 +26,10 @@ class SystemConfig:
     # Embedding Configuration
     EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "openai")  # openai, google, huggingface
     EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-ada-002")
+    HF_EMBEDDING_MODEL = os.getenv("HF_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+    
+    # RAG Configuration
+    RAG_COLLECTION_NAME = os.getenv("RAG_COLLECTION_NAME", "academic_resources")
     
     # API Keys
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -34,85 +38,78 @@ class SystemConfig:
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     
     # Crisis Detection Configuration
-    CRISIS_PATTERNS = [
-        r'\bsuicid\w*',  # suicide, suicidal
-        r'\bkill\b.*\bmyself\b',
-        r'\bend\b.*\blife\b',
-        r'\bhurt\b.*\bmyself\b',
-        r'\boverdose\b',
-        r'\bwant\b.*\bdie\b',
-        r'\bcan\'t\b.*\bgo\b.*\bon\b',  # "can't go on"
-        r'\bno\b.*\bpoint\b.*\bliving\b',  # "no point living"
-        r'\bgive\b.*\bup\b',  # "give up" in context of life
-        r'\bworthless\b.*\bdead\b',  # "better off dead"
-        r'\bno\b.*\bone\b.*\bcare\b',  # "no one cares"
-        r'\bend\b.*\bit\b',  # "end it" - refers to ending life
-        r'\brelief\b.*\bdeath\b',  # "relief in death"
-        r'\bpermanent\b.*\brelease\b',  # euphemism for suicide
-        r'\bgone\b.*\baway\b.*\bforever\b',  # "gone away forever"
-    ]
+    SENTIMENT_ANALYSIS_CONFIG = {
+        "CRITICAL": {
+            "patterns": [
+                r'\bsuicid\w*',  # suicide, suicidal
+                r'\bkill\b.*\bmyself\b',
+                r'\bend\b.*\blife\b',
+                r'\bhurt\b.*\bmyself\b',
+                r'\boverdose\b',
+                r'\bwant\b.*\bdie\b',
+                r'\bcan\'t\b.*\bgo\b.*\bon\b',  # "can't go on"
+                r'\bno\b.*\bpoint\b.*\bliving\b',  # "no point living"
+                r'\bgive\b.*\bup\b',  # "give up" in context of life
+                r'\bworthless\b.*\bdead\b',  # "better off dead"
+                r'\bno\b.*\bone\b.*\bcare\b',  # "no one cares"
+                r'\bend\b.*\bit\b',  # "end it" - refers to ending life
+                r'\brelief\b.*\bdeath\b',  # "relief in death"
+                r'\bpermanent\b.*\brelease\b',  # euphemism for suicide
+                r'\bgone\b.*\baway\b.*\bforever\b',  # "gone away forever"
+            ],
+            "keywords": [
+                'last time', 'final decision', 'won\'t bother anyone', 'won\'t be here',
+                'goodbye everyone', 'see you later alligator', 'final goodbye',
+                'done with everything', 'had enough', 'can\'t handle this anymore',
+                'this is it', 'my time', 'final chapter', 'closing the book',
+                'taking the leap', 'going to sleep forever'
+            ],
+            "score_impact": 5
+        },
+        "WARNING": {
+            "patterns": [
+                r'\bcan\'t\b.*\btake\b.*\banymore\b',
+                r'\bjust\b.*\bend\b.*\bit\b',
+                r'\bneed\b.*\bway\b.*\bout\b',
+                r'\blooking\b.*\bfor\b.*\bway\b.*\bout\b',
+                r'\bthink\b.*\bit\b.*\bover\b',  # "think it over" in context of ending life
+                r'\bready\b.*\bto\b.*\bgo\b',
+                r'\btime\b.*\bis\b.*\bup\b',
+                r'\benough\b.*\bis\b.*\benough\b',
+                r'\balone\b.*\bforever\b',
+                r'\bnever\b.*\banyone\b',
+                r'\bcan\'t\b.*\btalk\b.*\banyone\b',
+                r'\bno\b.*\bway\b.*\bout\b',
+                r'\bby\b.*\bmyself\b.*\band\b.*\bmyself\b',
+                r'\bno\b.*\bneed\b.*\banyone\b',
+                r'\beveryone\b.*\bleft\b.*\bme\b'
+            ],
+            "keywords": [
+                'alone', 'nobody understands', 'nothing matters', 'tired of living',
+                'everyone would be better off', 'life is meaningless', 'can\'t take it anymore',
+                'fed up', 'done with suffering', 'ready to go', 'time to leave',
+                'can\'t face another day', 'wish I could disappear', 'want to fade away',
+                'betrayed', 'abandoned', 'unwanted', 'rejected', 'unloved',
+                'unworthy', 'failure', 'disappointment', 'burden to others',
+                'can\'t breathe', 'chest tightness', 'heart racing', 'can\'t sleep',
+                'not eating', 'can\'t function', 'paralyzed', 'frozen',
+                'can\'t concentrate', 'mind blank', 'numb inside'
+            ],
+            "score_impact": 3
+        },
+        "CAUTION": {
+            "patterns": [],
+            "keywords": [
+                'depressed', 'desperate', 'hopeless', 'trapped', 'isolated',
+                'worthless', 'guilty', 'ashamed', 'angry', 'frustrated',
+                'overwhelmed', 'helpless', 'panic', 'terrified', 'afraid',
+                'tormented', 'agonizing', 'devastated', 'numb', 'broken',
+                'defeated', 'powerless', 'drowning', 'suffocating', 'crumbling'
+            ],
+            "score_impact": 1
+        }
+    }
 
-    HIGH_NEG_INDICATORS = [
-        'alone', 'nobody understands', 'nothing matters', 'tired of living',
-        'everyone would be better off', 'life is meaningless', 'can\'t take it anymore',
-        'fed up', 'done with suffering', 'ready to go', 'time to leave',
-        'can\'t face another day', 'wish I could disappear', 'want to fade away'
-    ]
-
-    CRISIS_MARKERS = [
-        'last time', 'final decision', 'won\'t bother anyone', 'won\'t be here',
-        'goodbye everyone', 'see you later alligator', 'final goodbye',
-        'done with everything', 'had enough', 'can\'t handle this anymore',
-        'this is it', 'my time', 'final chapter', 'closing the book',
-        'taking the leap', 'going to sleep forever'
-    ]
-
-    NEGATIVE_WORDS = [
-        'depressed', 'desperate', 'hopeless', 'trapped', 'isolated',
-        'worthless', 'guilty', 'ashamed', 'angry', 'frustrated',
-        'overwhelmed', 'helpless', 'panic', 'terrified', 'afraid',
-        'tormented', 'agonizing', 'devastated', 'numb', 'broken',
-        'defeated', 'powerless', 'drowning', 'suffocating', 'crumbling'
-    ]
-
-    POSITIVE_WORDS = [
-        'happy', 'joy', 'love', 'excited', 'grateful', 'thankful',
-        'peaceful', 'calm', 'hopeful', 'optimistic', 'confident',
-        'rejuvenated', 'inspired', 'motivated', 'content', 'fulfilled'
-    ]
-
-    ISOLATION_PATTERNS = [
-        r'\balone\b.*\bforever\b',
-        r'\bnever\b.*\banyone\b',
-        r'\bcan\'t\b.*\btalk\b.*\banyone\b',
-        r'\bno\b.*\bway\b.*\bout\b',
-        r'\bby\b.*\bmyself\b.*\band\b.*\bmyself\b',
-        r'\bno\b.*\bneed\b.*\banyone\b',
-        r'\beveryone\b.*\bleft\b.*\bme\b'
-    ]
-
-    # Enhanced Crisis Detection Configuration
-    EMOTIONAL_ESCALATION_PATTERNS = [
-        r'\bcan\'t\b.*\btake\b.*\banymore\b',
-        r'\bjust\b.*\bend\b.*\bit\b',
-        r'\bneed\b.*\bway\b.*\bout\b',
-        r'\blooking\b.*\bfor\b.*\bway\b.*\bout\b',
-        r'\bthink\b.*\bit\b.*\bover\b',  # "think it over" in context of ending life
-        r'\bready\b.*\bto\b.*\bgo\b',
-        r'\btime\b.*\bis\b.*\bup\b',
-        r'\benough\b.*\bis\b.*\benough\b',
-    ]
-
-    PHYSICAL_DISTRESS_INDICATORS = [
-        'can\'t breathe', 'chest tightness', 'heart racing', 'can\'t sleep',
-        'not eating', 'can\'t function', 'paralyzed', 'frozen',
-        'can\'t concentrate', 'mind blank', 'numb inside'
-    ]
-
-    RELATIONAL_STRESS_INDICATORS = [
-        'betrayed', 'abandoned', 'unwanted', 'rejected', 'unloved',
-        'unworthy', 'failure', 'disappointment', 'burden to others'
-    ]
     
     # Selfie Request Configuration
     SELFIE_REQUEST_INTERVAL_HOURS = int(os.getenv("SELFIE_REQUEST_INTERVAL_HOURS", "24"))
