@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional
 from abc import ABC, abstractmethod
 from datetime import datetime
 import json
+from tenacity import retry, stop_after_attempt, wait_exponential # Import tenacity decorators
 
 from config.system_config import SystemConfig
 
@@ -38,6 +39,7 @@ class WhatsAppIntegration(ExternalIntegration):
         """Check if WhatsApp integration is properly configured."""
         return all([self.access_token, self.phone_number_id])
     
+    @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3), reraise=True)
     def send_message(self, recipient: str, message: str) -> bool:
         """Send a message via WhatsApp Business API."""
         if not self.is_available():
@@ -62,7 +64,8 @@ class WhatsAppIntegration(ExternalIntegration):
             response = requests.post(
                 f"{self.api_url}/{self.phone_number_id}/messages",
                 headers=headers,
-                json=payload
+                json=payload,
+                timeout=10
             )
             return response.status_code == 200
         except Exception as e:
@@ -81,6 +84,7 @@ class TelegramIntegration(ExternalIntegration):
         """Check if Telegram integration is properly configured."""
         return bool(self.bot_token)
     
+    @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3), reraise=True)
     def send_message(self, recipient: str, message: str) -> bool:
         """Send a message via Telegram Bot API."""
         if not self.is_available():
@@ -96,7 +100,8 @@ class TelegramIntegration(ExternalIntegration):
         try:
             response = requests.post(
                 f"{self.api_url}/sendMessage",
-                json=payload
+                json=payload,
+                timeout=10
             )
             return response.status_code == 200
         except Exception as e:
@@ -153,6 +158,7 @@ class EHRIntegration:
         """Check if EHR integration is properly configured."""
         return bool(self.api_url and self.api_key)
     
+    @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3), reraise=True)
     def log_patient_note(self, patient_id: str, note: str, category: str = "general") -> bool:
         """Log a clinical note to the patient's EHR."""
         if not self.is_available():
@@ -171,13 +177,15 @@ class EHRIntegration:
             response = requests.post(
                 f"{self.api_url}/patients/{patient_id}/notes",
                 headers=self.headers,
-                json=payload
+                json=payload,
+                timeout=10
             )
             return response.status_code in [200, 201]
         except Exception as e:
             print(f"Error logging to EHR: {e}")
             return False
     
+    @retry(wait=wait_exponential(multiplier=1, min=4, max=10), stop=stop_after_attempt(3), reraise=True)
     def get_patient_info(self, patient_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve patient information from EHR."""
         if not self.is_available():
@@ -187,7 +195,8 @@ class EHRIntegration:
         try:
             response = requests.get(
                 f"{self.api_url}/patients/{patient_id}",
-                headers=self.headers
+                headers=self.headers,
+                timeout=10
             )
             if response.status_code == 200:
                 return response.json()
