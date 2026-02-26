@@ -8,10 +8,14 @@ from langchain_community.tools import SearxSearchResults
 from langchain_community.utilities import SearxSearchWrapper
 from langchain_core.tools import StructuredTool
 from typing import List
+from pymongo import MongoClient
+from langchain_community.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
+from core.gamification import GamificationManager # Import GamificationManager
 
 from config.app_config import get_config
 from core.memory_manager import (
     memory_store,
+    db, # Import db for direct access
     manage_episodic_memory_tool,
     search_episodic_memory_tool,
     manage_semantic_memory_tool,
@@ -21,8 +25,10 @@ from core.memory_manager import (
     manage_associative_memory_tool,
     search_associative_memory_tool,
     manage_general_memory_tool,
-    search_general_memory_tool
+    search_general_memory_tool,
+    get_emergency_contacts # Import the new function
 )
+from config.system_config import SystemConfig # Import SystemConfig
 
 # Try to import LangMem tools (for fallback if needed)
 try:
@@ -36,47 +42,133 @@ search_internet_tool = SearxSearchResults(
     wrapper=SearxSearchWrapper(searx_host=get_config("searx_host"))
 )
 
-# Memory management tools - all types available
-memory_tools = [
-    manage_episodic_memory_tool,    # Create/update/delete episodic memories
-    search_episodic_memory_tool,    # Search episodic memories (experiences/learning)
-    manage_semantic_memory_tool,    # Create/update/delete semantic memories (facts/triples)
-    search_semantic_memory_tool,    # Search semantic memories (facts/relationships)
-    manage_procedural_memory_tool,  # Create/update/delete procedural memories (instructions/rules)
-    search_procedural_memory_tool,  # Search procedural memories (how-to knowledge)
-    manage_associative_memory_tool, # Create/update/delete associative memories (concept connections)
-    search_associative_memory_tool, # Search associative memories (relationship patterns)
-    manage_general_memory_tool,     # General memory management (mixed usage)
-    search_general_memory_tool,     # General memory search (mixed retrieval)
-]
+# Initialize embeddings model for RAG tool
+def _initialize_embeddings_model_for_rag():
+    if SystemConfig.EMBEDDING_PROVIDER == "openai":
+        if not SystemConfig.OPENAI_API_KEY:
+            raise ValueError("OPENAI_API_KEY is not set for OpenAI embeddings.")
+        return OpenAIEmbeddings(openai_api_key=SystemConfig.OPENAI_API_KEY, model=SystemConfig.EMBEDDING_MODEL)
+    elif SystemConfig.EMBEDDING_PROVIDER == "huggingface":
+        return HuggingFaceEmbeddings(model_name=SystemConfig.HF_EMBEDDING_MODEL)
+    else:
+        raise ValueError(f"Unsupported embedding provider: {SystemConfig.EMBEDDING_PROVIDER}")
 
-all_tools = [
-    search_internet_tool
-]
+rag_embeddings_model = _initialize_embeddings_model_for_rag()
 
-# Add all memory tools
-all_tools.extend(memory_tools)
+@tool
+def consult_academic_resources_tool(query: str) -> str:
+    """
+    Consults a knowledge base of academic resources (e.g., study guides, coping strategies)
+    to answer student-specific questions or provide relevant information.
+    Performs a vector similarity search against ingested academic materials.
+    """
+    # Connect to MongoDB
+    client = MongoClient(SystemConfig.MONGODB_URI)
+    db = client[SystemConfig.DATABASE_NAME]
+    collection = db[SystemConfig.RAG_COLLECTION_NAME]
+
+    # Generate embedding for the query
+    query_embedding = rag_embeddings_model.embed_query(query)
+
+    # Perform vector similarity search (using a basic approximation for now)
+    # In a real-world scenario, you'd use MongoDB Atlas Vector Search or a dedicated vector DB
+    # For this example, we'll manually calculate cosine similarity for simplicity if Atlas Vector Search is not configured
+    # This is a placeholder for actual vector search capabilities.
+
+    # TODO: Replace with proper MongoDB Atlas Vector Search when available/configured
+    # For now, we'll fetch all and do a very basic similarity sort (not efficient for large datasets)
+    # This section needs to be improved with actual vector indexing and search
+    # For demonstration, we'll assume a simplified search:
+    
+    results = []
+    # This part needs a proper vector search implementation, likely with MongoDB Atlas Vector Search.
+    # For a basic simulation:
+    # This is highly inefficient and only for demonstration without a proper vector search index.
+    # It assumes the 'embedding' field exists in the documents.
+    if collection.estimated_document_count() > 0:
+        pipeline = [
+            {
+                "$vectorSearch": {
+                    "queryVector": query_embedding,
+                    "path": "embedding",
+                    "numCandidates": 100,  # Number of nearest neighbors to consider
+                    "limit": 5,           # Return top 5 results
+                    "index": "vector_index", # This needs to be created in MongoDB Atlas
+                }
+            },
+            {
+                "$project": {
+                    "content": 1,
+                    "source": 1,
+                    "score": {"$meta": "vectorSearchScore"}
+                }
+            }
+        ]
+        
+        try:
+            results = list(collection.aggregate(pipeline))
+        except Exception as e:
+            print(f"Vector search failed (Is vector_index configured?): {e}. Falling back to keyword search.")
+            # Fallback to basic keyword search if vector search fails
+            results = list(collection.find({"content": {"$regex": query, "$options": "i"}}).limit(5))
+            results = [{"content": doc["content"], "source": doc.get("source", "unknown"), "score": 0} for doc in results] # Assign dummy score
+
+
+    if not results:
+        return "No relevant academic resources found for your query."
+
+    formatted_results = []
+    for doc in results:
+        content = doc.get("content", "N/A")
+        source = doc.get("source", "N/A")
+        score = doc.get("score", "N/A")
+        formatted_results.append(f"Content: {content}\nSource: {source}\nRelevance Score: {score}")
+
+    return "Found the following academic resources:\n\n" + "\n\n---\n\n".join(formatted_results)
 
 # Mood Tracking Tool
 from langchain_core.tools import tool
 from datetime import datetime
-from core.memory_manager import db
 
 @tool
-def log_mood_tool(mood: str, intensity: int, notes: str = ""):
+def log_mood_tool(mood: str, intensity: int, notes: str = "", user_id: str = "default_user"):
     """Logs the user's current mood. Useful when the user explicitly states how they feel.
     Args:
         mood: One of 'Happy', 'Sad', 'Anxious', 'Angry', 'Neutral'.
         intensity: 1-10 scale.
         notes: Optional context.
+        user_id: The ID of the user logging the mood.
     """
     db["mood_logs"].insert_one({
+        "user_id": user_id,
         "mood": mood,
         "intensity": intensity,
         "notes": notes,
         "timestamp": datetime.now()
     })
-    return f"Logged mood: {mood} ({intensity}/10)"
+
+    gamification_manager = GamificationManager(user_id)
+    gamification_update = gamification_manager.log_mood_event()
+
+    return (
+        f"Logged mood: {mood} ({intensity}/10). "
+        f"Gamification update: {gamification_update['xp_gained']} XP gained (Total: {gamification_update['total_xp']} XP). "
+        f"{gamification_update['streak_message']}"
+    )
+
+@tool
+def check_progress_tool(user_id: str) -> str:
+    """
+    Checks the user's current gamification progress, including XP and streak days.
+    Useful for providing positive reinforcement or tracking user engagement.
+    """
+    gamification_manager = GamificationManager(user_id)
+    progress = gamification_manager.get_user_progress()
+    return (
+        f"Your current progress: {progress['xp']} XP, "
+        f"{progress['streak_days']}-day streak. "
+        f"Last mood logged on: {progress['last_mood_log_date']}."
+    )
 
 @tool
 def send_alert_tool(message: str, specific_contact: str = "guardian"):
@@ -140,7 +232,7 @@ class MusicTherapyTool:
         if mood_normalized not in music_recommendations:
             mood_normalized = "calm"
 
-        selected_music = random.choice(music_recommendations[mood_normalized])
+        selected_music = random.choice(music_recommendations[mood_normalized]) # nosec B311
 
         # Log session if db available
         try:
@@ -151,7 +243,7 @@ class MusicTherapyTool:
                     "duration": duration_minutes,
                     "timestamp": datetime.now()
                 })
-        except Exception:
+        except Exception: # nosec B110: Intentionally suppress non-critical logging errors to avoid tool failure
             # Never fail the tool due to logging issues
             pass
 
@@ -168,14 +260,12 @@ def music_therapy_tool(mood: str, duration_minutes: int = 10) -> str:
 
 # Expose a class-based tool instance as a StructuredTool if needed
 try:
-    from langchain_core.tools import StructuredTool
     music_therapy_class_tool = StructuredTool(
         name="music_therapy_class",
         description="Music therapy recommendations (class-based)",
         func=MusicTherapyTool(db_client=db).recommend
     )
-    all_tools.append(music_therapy_class_tool)
-except Exception:
+except Exception: # nosec B110: Intentionally suppress if StructuredTool isn't available to avoid application crash
     # If StructuredTool isn't available, continue silently (function wrapper exists)
     pass
 
@@ -361,41 +451,51 @@ def crisis_escalation_tool(user_id: str, severity: str, context: str = "") -> st
     except Exception as e:
         results.append(f"Failed to log crisis: {e}")
     
-    # Send via Twilio (SMS) - Primary channel for emergencies
-    if integration_manager.twilio.is_available():
-        try:
-            # Get emergency contacts from user profile (placeholder logic)
-            emergency_number = os.environ.get("EMERGENCY_CONTACT_PHONE", "")
-            if emergency_number:
-                success = integration_manager.twilio.send_message(emergency_number, alert_message)
+    # Get user-specific emergency contacts
+    emergency_contacts = get_emergency_contacts(user_id)
+    if not emergency_contacts:
+        results.append("No user-specific emergency contacts found.")
+
+    for contact in emergency_contacts:
+        contact_type = contact.get("type")
+        contact_value = contact.get("value")
+        contact_name = contact.get("name", contact_value)
+
+        if not contact_type or not contact_value:
+            results.append(f"Skipping malformed contact: {contact}")
+            continue
+
+        alert_message_with_contact = f"🚨 {severity} CRISIS ALERT for {user_id} 🚨\nContact Name: {contact_name}\nTime: {timestamp}\nContext: {context}"
+
+        if contact_type == "phone" and integration_manager.twilio.is_available():
+            try:
+                success = integration_manager.twilio.send_message(contact_value, alert_message_with_contact)
                 if success:
-                    results.append(f"Twilio SMS sent to {emergency_number}")
+                    results.append(f"Twilio SMS sent to {contact_name} ({contact_value})")
                 else:
-                    results.append("Twilio SMS failed")
-        except Exception as e:
-            results.append(f"Twilio error: {e}")
-    
-    # Send via WhatsApp
-    if integration_manager.whatsapp.is_available():
-        try:
-            wa_number = os.environ.get("EMERGENCY_WHATSAPP_NUMBER", "")
-            if wa_number:
-                success = integration_manager.whatsapp.send_message(wa_number, alert_message)
+                    results.append(f"Twilio SMS failed for {contact_name} ({contact_value})")
+            except Exception as e:
+                results.append(f"Twilio error for {contact_name} ({contact_value}): {e}")
+        elif contact_type == "whatsapp" and integration_manager.whatsapp.is_available():
+            try:
+                success = integration_manager.whatsapp.send_message(contact_value, alert_message_with_contact)
                 if success:
-                    results.append(f"WhatsApp sent to {wa_number}")
-        except Exception as e:
-            results.append(f"WhatsApp error: {e}")
-    
-    # Send via Telegram
-    if integration_manager.telegram.is_available():
-        try:
-            tg_chat = os.environ.get("EMERGENCY_TELEGRAM_CHAT", "")
-            if tg_chat:
-                success = integration_manager.telegram.send_message(tg_chat, alert_message)
+                    results.append(f"WhatsApp sent to {contact_name} ({contact_value})")
+                else:
+                    results.append(f"WhatsApp failed for {contact_name} ({contact_value})")
+            except Exception as e:
+                results.append(f"WhatsApp error for {contact_name} ({contact_value}): {e}")
+        elif contact_type == "telegram" and integration_manager.telegram.is_available():
+            try:
+                success = integration_manager.telegram.send_message(contact_value, alert_message_with_contact)
                 if success:
-                    results.append(f"Telegram sent to chat {tg_chat}")
-        except Exception as e:
-            results.append(f"Telegram error: {e}")
+                    results.append(f"Telegram sent to {contact_name} ({contact_value})")
+                else:
+                    results.append(f"Telegram failed for {contact_name} ({contact_value})")
+            except Exception as e:
+                results.append(f"Telegram error for {contact_name} ({contact_value}): {e}")
+        else:
+            results.append(f"No suitable integration for contact {contact_name} ({contact_type}: {contact_value})")
     
     # Log to EHR
     if integration_manager.ehr.is_available():
@@ -408,13 +508,27 @@ def crisis_escalation_tool(user_id: str, severity: str, context: str = "") -> st
     
     return f"Crisis escalation completed: {'; '.join(results)}"
 
-all_tools.append(log_mood_tool)
-all_tools.append(send_alert_tool)
-all_tools.append(music_therapy_tool)
-all_tools.append(request_selfie_tool)
-all_tools.append(analyze_visual_context_tool)
-all_tools.append(send_whatsapp_message_tool)
-all_tools.append(send_telegram_message_tool)
-all_tools.append(log_to_ehr_tool)
-all_tools.append(send_sms_tool)
-all_tools.append(crisis_escalation_tool)
+all_tools = [
+    search_internet_tool,
+    consult_academic_resources_tool,
+    log_mood_tool,
+    check_progress_tool,
+    send_alert_tool,
+    music_therapy_tool,
+    request_selfie_tool,
+    analyze_visual_context_tool,
+    send_whatsapp_message_tool,
+    send_telegram_message_tool,
+    log_to_ehr_tool,
+    send_sms_tool,
+    crisis_escalation_tool
+]
+
+all_tools.extend(memory_tools)
+
+# Ensure music_therapy_class_tool is appended if it was created
+try:
+    if 'music_therapy_class_tool' in locals() and isinstance(music_therapy_class_tool, StructuredTool):
+        all_tools.append(music_therapy_class_tool)
+except NameError:
+    pass
